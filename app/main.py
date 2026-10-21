@@ -2,19 +2,18 @@
 
 Run with:  uv run uvicorn app.main:app --reload
 Then open: http://127.0.0.1:8000/docs    (Swagger: upload files and chat)
-           http://127.0.0.1:8000/        (optional small chat UI)
+
 """
 from contextlib import asynccontextmanager
-from pathlib import Path
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
 from app.routers import chat, documents
 
-STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -65,8 +64,8 @@ app.openapi = _custom_openapi
 
 @app.get("/", include_in_schema=False)
 async def index():
-    """Serve the optional small chat frontend."""
-    return FileResponse(STATIC_DIR / "index.html")
+    """Open the API test harness."""
+    return RedirectResponse("/docs")
 
 
 @app.get("/health", tags=["meta"])

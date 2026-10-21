@@ -1,33 +1,25 @@
-"""Multi-turn chat: plans each message, gathers documents and/or web pages, streams a cited answer."""
-import asyncio
+"""Document-only multi-turn chat with cited streamed answers."""
+import logging
+import traceback
 import json
 import uuid
 from datetime import datetime, timezone
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import get_settings
-from app.schemas import ChatRequest
+from app.schemas import ChatError, ChatRequest, ChatResponse
 from app.services.citations import CitationFilter
-from app.services.llm import stream_answer
+from app.services.llm import FIXED_REPLIES, NOTHING_FOUND_MESSAGE, stream_answer
 from app.services.textfix import normalize
 from app.services.memory import clear_session, get_full_history, get_recent, list_sessions, save_message
 from app.services.retrieval import ready_document_names, search
 from app.services.router import plan_turn
-from app.services.web import build_web_sources, gather_web
-
 router = APIRouter(tags=["chat"])
-
-WEB_OFF_MESSAGE = (
-    "This question needs the web, but **web search is turned off**, so I can only answer from your uploaded documents.\n\n"
-    "Switch the 🌐 control next to the message box to **On** (always search the web) or **Auto** "
-    "(I decide when to search), then ask again."
-)
-NO_DOCS_MESSAGE = (
-    "Web search is turned off, so I work only from your uploaded documents, and none are ready yet.\n\n"
-    "Upload a file on the left, or switch the 🌐 control to **Auto** or **On** to chat without documents."
-)
+log = logging.getLogger(__name__)
+CHAT_ERROR_MESSAGE = "The assistant could not complete your request. Please try again."
 
 
 def _doc_source(h: dict) -> dict:
@@ -40,66 +32,47 @@ def _doc_source(h: dict) -> dict:
 
 
 async def _documents(question: str, doc_ids: list[str] | None) -> list[dict]:
-    """Vector search, keeping only passages that are plausibly relevant (unless the user picked documents)."""
+    """Apply the relevance threshold even when documents are explicitly selected."""
     s = get_settings()
     hits = await search(question, doc_ids=doc_ids)
-    if not doc_ids:
-        hits = [h for h in hits if h["score"] >= s.min_doc_score]
+    hits = [h for h in hits if h["score"] >= s.min_doc_score]
     return [_doc_source(h) for h in hits]
 
 
-async def run_chat(req: ChatRequest):
+async def run_chat(req: ChatRequest) -> AsyncIterator[dict]:
     """Events: status* -> meta -> token* -> done   (or error at any point)."""
-    s = get_settings()
     session_id = req.session_id or uuid.uuid4().hex
     asked_at = datetime.now(timezone.utc)
 
     try:
+        s = get_settings()
         history = await get_recent(session_id, s.history_turns)
         doc_ids = req.doc_ids or None
         names = await ready_document_names(doc_ids)
 
         yield {"type": "status", "text": "Thinking…"}
-        plan = await plan_turn(history, req.message, names, req.web)
-
-        blocked = None
-        if req.web == "off":  # pure document mode: never touch the web, say so when the web is what the user needs
-            if plan.wants_web and not plan.wants_docs:
-                blocked = WEB_OFF_MESSAGE
-            elif not names:
-                blocked = NO_DOCS_MESSAGE
-        if blocked:
-            yield {"type": "meta", "session_id": session_id, "search_query": plan.question, "sources": [], "notes": [],
-                   "plan": {"mode": "off", "documents": False, "web": False, "blocked": "web_off" if blocked is WEB_OFF_MESSAGE else "no_documents", "urls": [], "web_query": ""}}
-            yield {"type": "token", "t": blocked}
+        plan = await plan_turn(history, req.message, names)
+        sources = []
+        fixed = FIXED_REPLIES.get(plan.action)
+        if fixed is None:
+            yield {"type": "status", "text": "Searching your documents…"}
+            sources = await _documents(plan.question, doc_ids)
+            if not sources:
+                fixed = NOTHING_FOUND_MESSAGE
+        for i, source in enumerate(sources, start=1):
+            source["n"] = i
+        public = [{k: v for k, v in src.items() if k != "text"} for src in sources]
+        yield {"type": "meta", "session_id": session_id, "search_query": plan.question,
+               "sources": public, "notes": [], "plan": {"action": plan.action}}
+        if fixed is not None:
+            yield {"type": "token", "t": fixed}
             await save_message(session_id, "user", req.message, created_at=asked_at)
-            await save_message(session_id, "assistant", blocked, sources=[])
+            await save_message(session_id, "assistant", fixed, sources=[])
             yield {"type": "done", "session_id": session_id, "cited": []}
             return
-
-        doc_task = asyncio.create_task(_documents(plan.question, doc_ids)) if plan.use_documents else None
-        web_pages, notes = [], []
-        if plan.search_web:
-            yield {"type": "status", "text": "Reading " + (", ".join(u.split("//")[-1][:40] for u in plan.urls) if plan.urls else "the web") + "…"}
-            result = await gather_web(plan.urls, plan.web_query)
-            web_pages, notes = result.pages, result.notes
-        if doc_task:
-            yield {"type": "status", "text": "Searching your documents…"}
-
-        doc_sources = await doc_task if doc_task else []
-        web_sources = await build_web_sources(web_pages, plan.question)
-        sources = doc_sources + web_sources
-        for i, src in enumerate(sources, start=1):
-            src["n"] = i
-        public = [{k: v for k, v in src.items() if k != "text"} for src in sources]  # UI gets snippet, not full text
-        yield {
-            "type": "meta", "session_id": session_id, "search_query": plan.question, "sources": public, "notes": notes,
-            "plan": {"mode": req.web, "documents": plan.use_documents, "web": plan.search_web, "urls": plan.urls, "web_query": plan.web_query},
-        }
-
         flt = CitationFilter(len(sources))
         parts: list[str] = []
-        async for token in stream_answer(history, req.message, sources, notes, plan.use_documents, req.web):
+        async for token in stream_answer(history, req.message, sources):
             clean = normalize(flt.feed(token))  # plain ASCII hyphens/spaces so Markdown tables and rules render
             if clean:
                 parts.append(clean)
@@ -116,10 +89,13 @@ async def run_chat(req: ChatRequest):
         await save_message(session_id, "assistant", answer, sources=stored_sources)
         yield {"type": "done", "session_id": session_id, "cited": sorted(flt.cited)}
     except Exception as e:  # noqa: BLE001
-        yield {"type": "error", "detail": str(e)[:300]}
+        # Trace locations aid diagnosis without logging exception messages or locals.
+        locations = [(frame.f_code.co_name, line) for frame, line in traceback.walk_tb(e.__traceback__)]
+        log.error("Chat failed: exception_type=%s locations=%s", type(e).__name__, locations)
+        yield {"type": "error", "detail": CHAT_ERROR_MESSAGE}
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse | ChatError)
 async def chat(req: ChatRequest):
     if req.stream:
 
@@ -166,3 +142,5 @@ async def history(session_id: str):
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
     return {"session_id": session_id, "messages_deleted": await clear_session(session_id)}
+
+

@@ -1,5 +1,5 @@
 """Request models for the API."""
-from typing import Literal
+
 
 from pydantic import BaseModel, Field
 
@@ -12,10 +12,6 @@ class ChatRequest(BaseModel):
     )
     doc_ids: list[str] | None = Field(
         default=None, description="Restrict the search to these documents. Empty list = search all documents."
-    )
-    web: Literal["auto", "on", "off"] = Field(
-        default="auto",
-        description="Web access. auto = the assistant decides (and always reads URLs you mention); on = always look it up on the web; off = never.",
     )
     stream: bool = Field(
         default=True,
@@ -31,9 +27,20 @@ class ChatRequest(BaseModel):
                     "message": "What is this document about?",
                     "session_id": "",
                     "doc_ids": [],
-                    "web": "auto",
                     "stream": False,
                 }
             ]
         }
     }
+
+class ChatResponse(BaseModel):
+    session_id: str | None
+    answer: str
+    cited: list[int]
+    plan: dict | None
+    notes: list[str]
+    sources: list[dict]
+
+
+class ChatError(BaseModel):
+    error: str

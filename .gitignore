@@ -12,7 +12,6 @@ wheels/
 .env
 
 
-@'
 # Environment variables and secrets
 .env
 .env.*
@@ -47,4 +46,3 @@ Thumbs.db
 # Private keys and certificates
 *.pem
 *.key
-'@ | Set-Content .gitignore

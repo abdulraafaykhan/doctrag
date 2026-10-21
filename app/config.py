@@ -34,17 +34,8 @@ class Settings(BaseSettings):
     max_chunks_per_doc: int = 1500  # safety cap so one file cannot exhaust the free embedding quota
 
     # --- Chat behaviour ---
-    answer_temperature: float = 0.4   # higher = more natural/creative; lower = more literal
+    answer_temperature: float = 0.2   # higher = more natural/creative; lower = more literal
     min_doc_score: float = 0.60       # Atlas cosine score (0-1) below which a passage is not shown to the model
-
-    # --- Web access ---
-    web_enabled: bool = True
-    web_max_pages: int = 3            # pages read per question
-    web_search_results: int = 5
-    web_fetch_timeout: float = 12.0   # seconds per page
-    web_max_bytes: int = 2_000_000    # per page download cap
-    web_context_chars: int = 7000     # how much web text goes into one prompt (keeps Groq token limits happy)
-    tavily_api_key: str = ""          # optional: free key from tavily.com, more reliable than DuckDuckGo
 
     # --- Atlas vector index ---
     vector_index_name: str = "chunks_vector_index"
