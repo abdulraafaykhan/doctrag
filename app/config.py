@@ -1,11 +1,34 @@
 """Central configuration. Values come from environment variables / the .env file."""
 from functools import lru_cache
 
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", hide_input_in_errors=True)
+
+    jwt_secret: SecretStr
+    access_token_minutes: int = Field(default=30, gt=0)
+    cors_origins: str = "http://127.0.0.1:8000,http://localhost:8000"
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def validate_jwt_secret(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("JWT_SECRET must contain at least 32 characters")
+        return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_origins(cls, value: str) -> str:
+        if "*" in value:
+            raise ValueError("CORS_ORIGINS must contain explicit origins")
+        return value
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     # --- MongoDB Atlas ---
     mongodb_uri: str

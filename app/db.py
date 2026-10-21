@@ -49,6 +49,18 @@ def messages_col() -> AsyncCollection:
     return get_db()["messages"]
 
 
+def users_col() -> AsyncCollection:
+    return get_db()["users"]
+
+
+def sessions_col() -> AsyncCollection:
+    return get_db()["sessions"]
+
+
+def audit_log_col() -> AsyncCollection:
+    return get_db()["audit_log"]
+
+
 async def ensure_indexes() -> None:
     """Create collections, normal indexes, and the Atlas vector search index if missing."""
     settings = get_settings()
@@ -56,9 +68,13 @@ async def ensure_indexes() -> None:
 
     # Atlas needs the collection to exist before a search index can be created on it.
     existing = await db.list_collection_names()
-    for name in ("documents", "chunks", "messages"):
+    for name in ("documents", "chunks", "messages", "users", "sessions", "audit_log"):
         if name not in existing:
             await db.create_collection(name)
+
+    await users_col().create_index([("username", ASCENDING)], unique=True)
+    await sessions_col().create_index([("user_id", ASCENDING), ("updated_at", -1)])
+    await messages_col().create_index([("user_id", ASCENDING), ("session_id", ASCENDING), ("created_at", ASCENDING)])
 
     # Regular indexes: fast lookups by document and by conversation.
     await chunks_col().create_index([("doc_id", ASCENDING), ("chunk_index", ASCENDING)])

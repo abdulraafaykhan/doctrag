@@ -8,8 +8,10 @@ import pytest
 
 os.environ.update(MONGODB_URI="x", GROQ_API_KEY="x", GEMINI_API_KEY="x")
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-_db = types.ModuleType("app.db")
-_db.documents_col = _db.chunks_col = _db.messages_col = lambda: None
+_db = sys.modules.setdefault("app.db", types.ModuleType("app.db"))
+for name in ("documents_col", "chunks_col", "messages_col", "users_col", "sessions_col", "audit_log_col"):
+    if not hasattr(_db, name):
+        setattr(_db, name, lambda: None)
 sys.modules["app.db"] = _db
 
 from app.routers import chat
@@ -17,6 +19,8 @@ from app.schemas import ChatRequest
 from app.services import llm, router
 from app.services.router import Plan
 from app.config import Settings, get_settings
+from app.auth.security import CurrentUser, get_current_user
+TEST_USER = CurrentUser(user_id="user-a", username="alice", customer_id="demo-customer-001")
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +30,7 @@ def isolated_settings(monkeypatch):
     monkeypatch.setenv("GROQ_REWRITE_MODEL", "llama-3.1-8b-instant")
     monkeypatch.setenv("ANSWER_TEMPERATURE", "0.2")
     monkeypatch.setenv("MIN_DOC_SCORE", "0.6")
+    monkeypatch.setenv("JWT_SECRET", "test-only-secret-with-at-least-32-characters")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -41,6 +46,8 @@ def _chat(monkeypatch, plan, doc_hits, tokens, doc_ids=None, fail=False):
     async def hist(*a, **k): return [{"role": "assistant", "content": "earlier answer [1]"}]
     async def pl(*a, **k): return plan
     async def srch(q, doc_ids=None): return doc_hits
+    async def audit(*a, **kw): pass
+    monkeypatch.setattr(chat, "audit_event", audit)
     async def save(sid, role, content, **kw): saved.append((role, content, kw))
     async def stream(history, q, sources):
         calls.append(sources)
@@ -51,7 +58,7 @@ def _chat(monkeypatch, plan, doc_hits, tokens, doc_ids=None, fail=False):
                            search=srch, save_message=save, stream_answer=stream).items():
         monkeypatch.setattr(chat, key, value)
     async def go():
-        return [e async for e in chat.run_chat(ChatRequest(message="hi", session_id="s1", doc_ids=doc_ids))]
+        return [e async for e in chat.run_chat(ChatRequest(message="hi", session_id="s1", doc_ids=doc_ids), TEST_USER)]
     events = run(go())
     if plan.action != "search_documents" or not any(h["score"] >= 0.6 for h in doc_hits):
         assert calls == []
@@ -161,18 +168,21 @@ def api(monkeypatch):
     from fastapi.testclient import TestClient
     app = FastAPI()
     app.include_router(chat.router)
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER
+    async def owned(*args): return {"_id": "s1", "user_id": TEST_USER.user_id}
+    monkeypatch.setattr(chat, "require_session", owned)
     return TestClient(app)
 
 
 @pytest.mark.parametrize("stream", [False, True])
 def test_http_reply_contract(monkeypatch, api, stream):
-    async def events(req):
+    async def events(req, user):
         yield {"type": "status", "text": "Thinking…"}
         yield {"type": "meta", "session_id": "s1", "sources": [], "plan": {"action": "greeting"}}
         yield {"type": "token", "t": llm.GREETING_MESSAGE}
         yield {"type": "done", "session_id": "s1", "cited": []}
     monkeypatch.setattr(chat, "run_chat", events)
-    response = api.post("/chat", json={"message": "Hello", "stream": stream})
+    response = api.post("/chat", json={"message": "Hello", "session_id": "s1", "stream": stream})
     assert response.status_code == 200
     if stream:
         assert "text/event-stream" in response.headers["content-type"]
@@ -190,6 +200,8 @@ def test_root_redirect_and_swagger_file_picker(monkeypatch):
     async def status(): return "READY"
     monkeypatch.setattr(_db, "vector_index_status", status, raising=False)
     from app import main
+    async def sweep(): return 0
+    monkeypatch.setattr(main, "sweep_stuck_documents", sweep)
     from fastapi.testclient import TestClient
     with TestClient(main.app) as client:
         response = client.get("/", follow_redirects=False)

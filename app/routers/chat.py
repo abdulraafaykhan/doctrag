@@ -2,22 +2,25 @@
 import logging
 import traceback
 import json
-import uuid
 from datetime import datetime, timezone
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from app.auth.security import CurrentUser, get_current_user
+from app.services.audit import audit_event
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import get_settings
-from app.schemas import ChatError, ChatRequest, ChatResponse
+from app.schemas import ChatError, ChatRequest, ChatResponse, SessionResponse, SessionDeleted, MessageResponse
 from app.services.citations import CitationFilter
 from app.services.llm import FIXED_REPLIES, NOTHING_FOUND_MESSAGE, stream_answer
 from app.services.textfix import normalize
-from app.services.memory import clear_session, get_full_history, get_recent, list_sessions, save_message
+from app.services.memory import clear_session, create_session, require_session, get_full_history, get_recent, list_sessions, save_message
 from app.services.retrieval import ready_document_names, search
 from app.services.router import plan_turn
-router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
 log = logging.getLogger(__name__)
 CHAT_ERROR_MESSAGE = "The assistant could not complete your request. Please try again."
 
@@ -39,14 +42,14 @@ async def _documents(question: str, doc_ids: list[str] | None) -> list[dict]:
     return [_doc_source(h) for h in hits]
 
 
-async def run_chat(req: ChatRequest) -> AsyncIterator[dict]:
+async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
     """Events: status* -> meta -> token* -> done   (or error at any point)."""
-    session_id = req.session_id or uuid.uuid4().hex
+    session_id = req.session_id
     asked_at = datetime.now(timezone.utc)
 
     try:
         s = get_settings()
-        history = await get_recent(session_id, s.history_turns)
+        history = await get_recent(session_id, s.history_turns, user_id=user.user_id)
         doc_ids = req.doc_ids or None
         names = await ready_document_names(doc_ids)
 
@@ -66,8 +69,9 @@ async def run_chat(req: ChatRequest) -> AsyncIterator[dict]:
                "sources": public, "notes": [], "plan": {"action": plan.action}}
         if fixed is not None:
             yield {"type": "token", "t": fixed}
-            await save_message(session_id, "user", req.message, created_at=asked_at)
-            await save_message(session_id, "assistant", fixed, sources=[])
+            await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id)
+            await save_message(session_id, "assistant", fixed, sources=[], user_id=user.user_id)
+            await audit_event("chat", user_id=user.user_id, session_id=session_id)
             yield {"type": "done", "session_id": session_id, "cited": []}
             return
         flt = CitationFilter(len(sources))
@@ -85,8 +89,9 @@ async def run_chat(req: ChatRequest) -> AsyncIterator[dict]:
         answer = "".join(parts)
         stored_sources = [{**{k: v for k, v in src.items() if k != "snippet"}, "cited": src["n"] in flt.cited} for src in public]
         # Save only after a complete answer, so history never holds half-finished turns.
-        await save_message(session_id, "user", req.message, created_at=asked_at)
-        await save_message(session_id, "assistant", answer, sources=stored_sources)
+        await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id)
+        await save_message(session_id, "assistant", answer, sources=stored_sources, user_id=user.user_id)
+        await audit_event("chat", user_id=user.user_id, session_id=session_id)
         yield {"type": "done", "session_id": session_id, "cited": sorted(flt.cited)}
     except Exception as e:  # noqa: BLE001
         # Trace locations aid diagnosis without logging exception messages or locals.
@@ -96,18 +101,19 @@ async def run_chat(req: ChatRequest) -> AsyncIterator[dict]:
 
 
 @router.post("/chat", response_model=ChatResponse | ChatError)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    await require_session(req.session_id, user.user_id)
     if req.stream:
 
         async def event_stream():
-            async for ev in run_chat(req):
+            async for ev in run_chat(req, user):
                 yield {"event": ev["type"], "data": json.dumps(ev)}
 
         return EventSourceResponse(event_stream())
 
     # Non-streaming: collect everything and return one JSON object (handy for Swagger testing).
     answer, meta, done, error = [], {}, {}, None
-    async for ev in run_chat(req):
+    async for ev in run_chat(req, user):
         if ev["type"] == "meta":
             meta = ev
         elif ev["type"] == "token":
@@ -128,19 +134,21 @@ async def chat(req: ChatRequest):
     }
 
 
-@router.get("/sessions")
-async def sessions():
-    """List recent conversations (for the sidebar)."""
-    return await list_sessions()
+@router.post("/sessions", response_model=SessionResponse, status_code=201)
+async def new_session(user: Annotated[CurrentUser, Depends(get_current_user)]):
+    return await create_session(user.user_id)
 
 
-@router.get("/sessions/{session_id}/history")
-async def history(session_id: str):
-    return await get_full_history(session_id)
+@router.get("/sessions", response_model=list[SessionResponse])
+async def sessions(user: Annotated[CurrentUser, Depends(get_current_user)]):
+    return await list_sessions(user.user_id)
 
 
-@router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
-    return {"session_id": session_id, "messages_deleted": await clear_session(session_id)}
+@router.get("/sessions/{session_id}/history", response_model=list[MessageResponse])
+async def history(session_id: str, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    return await get_full_history(session_id, user_id=user.user_id)
 
 
+@router.delete("/sessions/{session_id}", response_model=SessionDeleted)
+async def delete_session(session_id: str, user: Annotated[CurrentUser, Depends(get_current_user)]):
+    return {"session_id": session_id, "messages_deleted": await clear_session(session_id, user_id=user.user_id)}

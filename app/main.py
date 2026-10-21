@@ -13,22 +13,30 @@ from fastapi.responses import RedirectResponse
 
 from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
 from app.routers import chat, documents
+from app.auth.router import router as auth_router
+from app.config import get_settings
+from app.schemas import HealthResponse
+from app.services.maintenance import sweep_stuck_documents
 
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await connect_to_mongo()
-    await ensure_indexes()
-    yield
-    await close_mongo()
+    try:
+        await connect_to_mongo()
+        await ensure_indexes()
+        await sweep_stuck_documents()
+        yield
+    finally:
+        await close_mongo()
 
 
 app = FastAPI(title="doctrag", description="RAG over your documents, with multi-turn chat.", lifespan=lifespan)
 
-# Open CORS for local development. Tighten before deploying.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Only explicitly configured browser origins may access the API.
+app.add_middleware(CORSMiddleware, allow_origins=get_settings().allowed_origins, allow_methods=["*"], allow_headers=["*"])
 
+app.include_router(auth_router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 
@@ -68,6 +76,6 @@ async def index():
     return RedirectResponse("/docs")
 
 
-@app.get("/health", tags=["meta"])
+@app.get("/health", tags=["meta"], response_model=HealthResponse)
 async def health():
     return {"status": "ok", "vector_index": await vector_index_status()}
