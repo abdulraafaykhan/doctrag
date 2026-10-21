@@ -45,7 +45,8 @@ def _chat(monkeypatch, plan, doc_hits, tokens, attachment_ids=None, fail=False):
     async def names(*a, **k): return ["report.pdf"]
     async def hist(*a, **k): return [{"role": "assistant", "content": "earlier answer [1]"}]
     async def pl(*a, **k): return plan
-    async def srch(q, **kwargs): return doc_hits
+    async def execute(name, ctx, args): return {"documents": [h for h in doc_hits if h["score"] >= .6]}
+    monkeypatch.setattr(chat, "execute", execute)
     async def resolved(*a): return []
     async def ready(*a):
         if False: yield {}
@@ -60,7 +61,7 @@ def _chat(monkeypatch, plan, doc_hits, tokens, attachment_ids=None, fail=False):
             raise RuntimeError("PRIVATE message and token")
         for t in tokens: yield t
     for key, value in dict(ready_document_names=names, get_recent=hist, plan_turn=pl,
-                           search=srch, save_message=save, stream_answer=stream).items():
+                           save_message=save, stream_answer=stream).items():
         monkeypatch.setattr(chat, key, value)
     async def go():
         return [e async for e in chat.run_chat(ChatRequest(message="hi", session_id="s1", attachment_ids=attachment_ids or []), TEST_USER)]
@@ -140,7 +141,7 @@ def test_router_rewrites_document_followup(monkeypatch):
     async def create(**kw):
         assert kw["model"] == "llama-3.1-8b-instant"
         return types.SimpleNamespace(choices=[types.SimpleNamespace(message=types.SimpleNamespace(
-            content=json.dumps({"action": "search_documents", "question": "What was revenue in the report?"})))])
+            tool_calls=[types.SimpleNamespace(function=types.SimpleNamespace(name="search_documents", arguments=json.dumps({"query": "What was revenue in the report?"})))]))])
     monkeypatch.setattr(router, "client", lambda: types.SimpleNamespace(chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=create))))
     assert run(router.plan_turn([], "and revenue?", ["report.pdf"])).question == "What was revenue in the report?"
 

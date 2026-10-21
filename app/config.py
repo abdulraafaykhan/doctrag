@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # --- MongoDB Atlas ---
     mongodb_uri: str
     mongodb_db_name: str = "rag_db"
+    bank_db_name: str = "bank_db"
+    bank_mongodb_uri: str = ""
+    router_history_messages: int = 4
+    router_message_chars: int = 400
 
     # --- Groq (chat LLM) ---
     groq_api_key: str

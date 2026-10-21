@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
+from app.bank.db import close_bank
 from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
 from app.routers import chat, attachments
 from app.auth.router import router as auth_router
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
         await sweep_stuck_documents()
         yield
     finally:
+        await close_bank()
         await close_mongo()
 
 

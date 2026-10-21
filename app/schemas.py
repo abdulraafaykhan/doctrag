@@ -36,6 +36,7 @@ class ChatResponse(BaseModel):
     plan: dict | None
     notes: list[str]
     sources: list[dict]
+    account_cards: list[dict] = Field(default_factory=list)
 
 
 class ChatError(BaseModel):

@@ -16,11 +16,12 @@ from sse_starlette.sse import EventSourceResponse
 from app.config import get_settings
 from app.schemas import ChatError, ChatRequest, ChatResponse, SessionResponse, SessionDeleted, MessageResponse
 from app.services.citations import CitationFilter
-from app.services.llm import FIXED_REPLIES, NOTHING_FOUND_MESSAGE, stream_answer
+from app.services.llm import FIXED_REPLIES, NOTHING_FOUND_MESSAGE, DATA_UNAVAILABLE_MESSAGE, ACCOUNT_AMOUNT_MESSAGE, stream_answer, valid_account_amounts
 from app.services.textfix import normalize
 from app.services.memory import clear_session, create_session, require_session, touch_session, get_full_history, get_recent, list_sessions, save_message
-from app.services.retrieval import ready_document_names, search
+from app.services.retrieval import ready_document_names
 from app.services.router import plan_turn
+from app.tools.registry import ToolContext, execute
 router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
 log = logging.getLogger(__name__)
 CHAT_ERROR_MESSAGE = "The assistant could not complete your request. Please try again."
@@ -33,14 +34,6 @@ def _doc_source(h: dict) -> dict:
         "kind": h.get("kind", "text"), "doc_id": h["doc_id"], "chunk_index": h["chunk_index"],
         "score": round(h["score"], 4), "text": h["text"], "snippet": h["text"][:400],
     }
-
-
-async def _documents(question: str, user: CurrentUser, session_id: str) -> list[dict]:
-    """Search only the shared library and the verified owner's current chat."""
-    s = get_settings()
-    hits = await search(question, owner_id=user.user_id, session_id=session_id)
-    hits = [h for h in hits if h["score"] >= s.min_doc_score]
-    return [_doc_source(h) for h in hits]
 
 
 async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
@@ -62,17 +55,30 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
         yield {"type": "status", "text": "Thinking…"}
         plan = await plan_turn(history, req.message, names)
         sources = []
+        account_data = None
+        cards = []
         fixed = FIXED_REPLIES.get(plan.action)
+        if fixed is not None:
+            await audit_event("tool_call", user_id=user.user_id, session_id=session_id,
+                              tool="reply_without_data", outcome="ok", latency_ms=0)
         if fixed is None:
-            yield {"type": "status", "text": "Searching your documents…"}
-            sources = await _documents(plan.question, user, session_id)
-            if not sources:
-                fixed = NOTHING_FOUND_MESSAGE
+            ctx = ToolContext(user_id=user.user_id, customer_id=user.customer_id, session_id=session_id)
+            result = await execute(plan.action, ctx,
+                {"query": plan.question} if plan.action == "search_documents" else {})
+            if "error" in result:
+                fixed = DATA_UNAVAILABLE_MESSAGE
+            elif plan.action == "get_balances":
+                account_data = {"accounts": result["accounts"]}
+                cards = [result["display"]]
+            else:
+                sources = [_doc_source(h) for h in result["documents"]]
+                if not sources:
+                    fixed = NOTHING_FOUND_MESSAGE
         for i, source in enumerate(sources, start=1):
             source["n"] = i
         public = [{k: v for k, v in src.items() if k != "text"} for src in sources]
         yield {"type": "meta", "session_id": session_id, "search_query": plan.question,
-               "sources": public, "notes": [], "plan": {"action": plan.action}}
+               "sources": public, "account_cards": cards, "notes": [], "plan": {"action": plan.action}}
         if fixed is not None:
             yield {"type": "token", "t": fixed}
             await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id, attachments=attachment_refs)
@@ -82,17 +88,25 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
             return
         flt = CitationFilter(len(sources))
         parts: list[str] = []
-        async for token in stream_answer(history, req.message, sources):
+        answer_stream = (stream_answer(history, req.message, sources, account_data=account_data)
+                         if account_data is not None else stream_answer(history, req.message, sources))
+        async for token in answer_stream:
             clean = normalize(flt.feed(token))  # plain ASCII hyphens/spaces so Markdown tables and rules render
             if clean:
                 parts.append(clean)
-                yield {"type": "token", "t": clean}
+                if account_data is None:
+                    yield {"type": "token", "t": clean}
         tail = normalize(flt.flush())
         if tail:
             parts.append(tail)
-            yield {"type": "token", "t": tail}
+            if account_data is None:
+                yield {"type": "token", "t": tail}
 
         answer = "".join(parts)
+        if account_data is not None:
+            if not valid_account_amounts(answer, account_data):
+                answer = ACCOUNT_AMOUNT_MESSAGE
+            yield {"type": "token", "t": answer}
         stored_sources = [{**{k: v for k, v in src.items() if k != "snippet"}, "cited": src["n"] in flt.cited} for src in public]
         # Save only after a complete answer, so history never holds half-finished turns.
         await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id, attachments=attachment_refs)
@@ -138,6 +152,7 @@ async def chat(req: ChatRequest, user: Annotated[CurrentUser, Depends(get_curren
         "cited": done.get("cited", []),
         "plan": meta.get("plan"),
         "notes": meta.get("notes", []),
+        "account_cards": meta.get("account_cards", []),
         "sources": [{k: v for k, v in src.items() if k != "snippet"} for src in meta.get("sources", [])],
     }
 
