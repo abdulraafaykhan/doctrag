@@ -1,0 +1,74 @@
+"""FastAPI entry point.
+
+Run with:  uv run uvicorn app.main:app --reload
+Then open: http://127.0.0.1:8000/docs    (Swagger: upload files and chat)
+           http://127.0.0.1:8000/        (optional small chat UI)
+"""
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
+from app.routers import chat, documents
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await connect_to_mongo()
+    await ensure_indexes()
+    yield
+    await close_mongo()
+
+
+app = FastAPI(title="doctrag", description="RAG over your documents, with multi-turn chat.", lifespan=lifespan)
+
+# Open CORS for local development. Tighten before deploying.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(documents.router)
+app.include_router(chat.router)
+
+
+# --- Swagger file-upload fix -------------------------------------------------------------
+# Recent FastAPI/Pydantic versions describe file fields as `contentMediaType:
+# application/octet-stream`, which Swagger UI doesn't recognise, so it shows a text box.
+# Swagger draws a real file picker for `format: binary`, so we rewrite the schema.
+def _fix_binary(node) -> None:
+    if isinstance(node, dict):
+        if node.get("type") == "string" and node.get("contentMediaType") == "application/octet-stream":
+            node.pop("contentMediaType")
+            node["format"] = "binary"
+        for value in node.values():
+            _fix_binary(value)
+    elif isinstance(node, list):
+        for value in node:
+            _fix_binary(value)
+
+
+_default_openapi = app.openapi
+
+
+def _custom_openapi():
+    schema = _default_openapi()
+    _fix_binary(schema)
+    return schema
+
+
+app.openapi = _custom_openapi
+# ------------------------------------------------------------------------------------------
+
+
+@app.get("/", include_in_schema=False)
+async def index():
+    """Serve the optional small chat frontend."""
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/health", tags=["meta"])
+async def health():
+    return {"status": "ok", "vector_index": await vector_index_status()}
