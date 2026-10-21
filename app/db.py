@@ -61,6 +61,13 @@ def audit_log_col() -> AsyncCollection:
     return get_db()["audit_log"]
 
 
+def vector_index_definition() -> dict:
+    return {"fields": [
+        {"type": "vector", "path": "embedding", "numDimensions": get_settings().embed_dim, "similarity": "cosine"},
+        *({"type": "filter", "path": field} for field in ("doc_id", "scope", "owner_id", "session_id")),
+    ]}
+
+
 async def ensure_indexes() -> None:
     """Create collections, normal indexes, and the Atlas vector search index if missing."""
     settings = get_settings()
@@ -81,6 +88,12 @@ async def ensure_indexes() -> None:
     await messages_col().create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
     await documents_col().create_index([("file_hash", ASCENDING)])
 
+    await documents_col().create_index(
+        [("scope", ASCENDING), ("owner_id", ASCENDING), ("session_id", ASCENDING), ("file_hash", ASCENDING)],
+        unique=True, partialFilterExpression={"scope": "user"}, name="user_document_dedupe")
+    await documents_col().create_index([("scope", ASCENDING), ("owner_id", ASCENDING), ("session_id", ASCENDING)])
+    await chunks_col().create_index([("scope", ASCENDING), ("owner_id", ASCENDING), ("session_id", ASCENDING)])
+
     # Vector search index (built by Atlas in the background, usually under a minute).
     cursor = await chunks_col().list_search_indexes(settings.vector_index_name)
     found = await cursor.to_list()
@@ -88,18 +101,7 @@ async def ensure_indexes() -> None:
         model = SearchIndexModel(
             name=settings.vector_index_name,
             type="vectorSearch",
-            definition={
-                "fields": [
-                    {
-                        "type": "vector",
-                        "path": "embedding",
-                        "numDimensions": settings.embed_dim,
-                        "similarity": "cosine",
-                    },
-                    # lets us restrict a search to specific documents
-                    {"type": "filter", "path": "doc_id"},
-                ]
-            },
+            definition=vector_index_definition(),
         )
         await chunks_col().create_search_index(model=model)
 

@@ -40,12 +40,17 @@ def run(c):
     return asyncio.run(c)
 
 
-def _chat(monkeypatch, plan, doc_hits, tokens, doc_ids=None, fail=False):
+def _chat(monkeypatch, plan, doc_hits, tokens, attachment_ids=None, fail=False):
     saved, calls = [], []
     async def names(*a, **k): return ["report.pdf"]
     async def hist(*a, **k): return [{"role": "assistant", "content": "earlier answer [1]"}]
     async def pl(*a, **k): return plan
-    async def srch(q, doc_ids=None): return doc_hits
+    async def srch(q, **kwargs): return doc_hits
+    async def resolved(*a): return []
+    async def ready(*a):
+        if False: yield {}
+    monkeypatch.setattr(chat, "resolve_attachments", resolved)
+    monkeypatch.setattr(chat, "attachment_events", ready)
     async def audit(*a, **kw): pass
     monkeypatch.setattr(chat, "audit_event", audit)
     async def save(sid, role, content, **kw): saved.append((role, content, kw))
@@ -58,7 +63,7 @@ def _chat(monkeypatch, plan, doc_hits, tokens, doc_ids=None, fail=False):
                            search=srch, save_message=save, stream_answer=stream).items():
         monkeypatch.setattr(chat, key, value)
     async def go():
-        return [e async for e in chat.run_chat(ChatRequest(message="hi", session_id="s1", doc_ids=doc_ids), TEST_USER)]
+        return [e async for e in chat.run_chat(ChatRequest(message="hi", session_id="s1", attachment_ids=attachment_ids or []), TEST_USER)]
     events = run(go())
     if plan.action != "search_documents" or not any(h["score"] >= 0.6 for h in doc_hits):
         assert calls == []
@@ -99,9 +104,9 @@ def test_fixed_replies_are_saved_without_answer_call(monkeypatch, action, expect
 
 
 @pytest.mark.parametrize("hits", [[], [HIT(0.3)]])
-@pytest.mark.parametrize("doc_ids", [None, ["d1"]])
-def test_nothing_found_never_calls_answer_model(monkeypatch, hits, doc_ids):
-    events, saved = _chat(monkeypatch, Plan(question="q"), hits, ["UNEXPECTED"], doc_ids=doc_ids)
+@pytest.mark.parametrize("attachment_ids", [None, ["d1"]])
+def test_nothing_found_never_calls_answer_model(monkeypatch, hits, attachment_ids):
+    events, saved = _chat(monkeypatch, Plan(question="q"), hits, ["UNEXPECTED"], attachment_ids=attachment_ids)
     assert "".join(e["t"] for e in events if e["type"] == "token") == llm.NOTHING_FOUND_MESSAGE
     assert saved[1][1] == llm.NOTHING_FOUND_MESSAGE
 
@@ -171,6 +176,10 @@ def api(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: TEST_USER
     async def owned(*args): return {"_id": "s1", "user_id": TEST_USER.user_id}
     monkeypatch.setattr(chat, "require_session", owned)
+    async def empty(*args): return []
+    async def touch(*args): pass
+    monkeypatch.setattr(chat, "resolve_attachments", empty)
+    monkeypatch.setattr(chat, "touch_session", touch)
     return TestClient(app)
 
 
@@ -208,7 +217,7 @@ def test_root_redirect_and_swagger_file_picker(monkeypatch):
         assert response.headers["location"] == "/docs"
         schema = client.get("/openapi.json").json()
         assert "web" not in schema["components"]["schemas"]["ChatRequest"]["properties"]
-        body = schema["paths"]["/documents"]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]
+        body = schema["paths"]["/sessions/{session_id}/attachments"]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]
         upload = schema["components"]["schemas"][body["$ref"].split("/")[-1]]
         assert upload["properties"]["files"]["items"]["format"] == "binary"
 

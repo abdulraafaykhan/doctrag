@@ -265,7 +265,7 @@ def _split_preamble(rows: list[list[str]]) -> tuple[list[list[str]], list[list[s
     return [], rows
 
 
-def _grid_sections(rows, *, name, base, heading, result: LoadResult, summary: bool = True) -> list[Section]:
+def _grid_sections(rows, *, name, base, heading, result: LoadResult, summary: bool = True, max_table_rows: int | None = None) -> list[Section]:
     """Full treatment for a spreadsheet-style table: notes + summary + row-group chunks."""
     sections: list[Section] = []
     preamble, rows = _split_preamble(rows)
@@ -277,7 +277,7 @@ def _grid_sections(rows, *, name, base, heading, result: LoadResult, summary: bo
     if not body:
         result.warn(f"'{name}' has a header but no data rows.")
         return sections
-    cap = get_settings().max_table_rows
+    cap = get_settings().max_table_rows if max_table_rows is None else max_table_rows
     indexed = body[:cap]
     if len(body) > cap:
         result.warn(f"'{name}' has {len(body)} rows; only the first {cap} are searchable "
@@ -288,13 +288,16 @@ def _grid_sections(rows, *, name, base, heading, result: LoadResult, summary: bo
     return sections
 
 
-def _small_table_sections(rows, *, name, base, heading, page=None, result: LoadResult) -> list[Section]:
+def _small_table_sections(rows, *, name, base, heading, page=None, result: LoadResult, max_table_rows: int | None = None) -> list[Section]:
     """Tables embedded in documents/slides: no summary, just header-preserving row chunks."""
     headers, body = _prepare_grid(rows)
     if not body:
         # a one-row "table" is layout, not data: keep it as plain text
         text = " | ".join(c for r in rows for c in r if c)
         return [Section(text=text, location=base, page=page, heading=heading)] if text else []
+    if max_table_rows is not None and len(body) > max_table_rows:
+        result.warn(f"'{name}' has {len(body)} rows; only the first {max_table_rows} are searchable.")
+        body = body[:max_table_rows]
     return _table_sections(headers, body, name=name, base=base, heading=heading, page=page)
 
 
@@ -315,7 +318,7 @@ def _md_cells(line: str) -> list[str]:
     return [_cell_text(c) for c in line.strip().strip("|").split("|")]
 
 
-def _load_markdown(data: bytes, title: str, result: LoadResult) -> None:
+def _load_markdown(data: bytes, title: str, result: LoadResult, max_table_rows: int | None = None) -> None:
     lines = _decode(data).replace("\x00", "").replace("\r\n", "\n").split("\n")
     path: list[tuple[int, str]] = []
     buf: list[str] = []
@@ -353,7 +356,7 @@ def _load_markdown(data: bytes, title: str, result: LoadResult) -> None:
             crumb = _breadcrumb(path)
             base = f"{crumb} · table {tables}" if crumb else f"Table {tables}"
             result.sections += _small_table_sections(
-                rows, name=f"Table {tables}", base=base, heading=f"{title} > {base}", result=result)
+                rows, name=f"Table {tables}", base=base, heading=f"{title} > {base}", result=result, max_table_rows=max_table_rows)
             continue
         else:
             buf.append(line)
@@ -361,7 +364,7 @@ def _load_markdown(data: bytes, title: str, result: LoadResult) -> None:
     flush()
 
 
-def _load_delimited(data: bytes, title: str, result: LoadResult, ext: str) -> None:
+def _load_delimited(data: bytes, title: str, result: LoadResult, ext: str, max_table_rows: int | None = None) -> None:
     text = _decode(data)
     if ext == ".tsv":
         delim = "\t"
@@ -380,10 +383,10 @@ def _load_delimited(data: bytes, title: str, result: LoadResult, ext: str) -> No
             rows.append([_cell_text(c) for c in r[:MAX_COLUMNS]])
     except csv.Error as e:
         result.warn(f"'{title}': stopped reading at a malformed line ({e}).")
-    result.sections += _grid_sections(rows, name=title, base="", heading=title, result=result)
+    result.sections += _grid_sections(rows, name=title, base="", heading=title, result=result, max_table_rows=max_table_rows)
 
 
-def _load_xlsx(data: bytes, title: str, result: LoadResult) -> None:
+def _load_xlsx(data: bytes, title: str, result: LoadResult, max_table_rows: int | None = None) -> None:
     openpyxl = _need("openpyxl", "openpyxl")
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     try:
@@ -406,12 +409,12 @@ def _load_xlsx(data: bytes, title: str, result: LoadResult) -> None:
                 continue
             base = f"Sheet '{ws.title}'"
             result.sections += _grid_sections(rows, name=ws.title, base=base,
-                                              heading=f"{title} > {base}", result=result)
+                                              heading=f"{title} > {base}", result=result, max_table_rows=max_table_rows)
     finally:
         wb.close()
 
 
-def _load_docx(data: bytes, title: str, result: LoadResult) -> None:
+def _load_docx(data: bytes, title: str, result: LoadResult, max_table_rows: int | None = None) -> None:
     from docx import Document
     from docx.oxml.ns import qn
     from docx.table import Table
@@ -462,7 +465,7 @@ def _load_docx(data: bytes, title: str, result: LoadResult) -> None:
             crumb = _breadcrumb(path)
             base = f"{crumb} · table {tables}" if crumb else f"Table {tables}"
             result.sections += _small_table_sections(
-                rows, name=f"Table {tables}", base=base, heading=f"{title} > {base}", result=result)
+                rows, name=f"Table {tables}", base=base, heading=f"{title} > {base}", result=result, max_table_rows=max_table_rows)
     flush()
 
 
@@ -475,7 +478,7 @@ def _load_pdf_plain(data: bytes, title: str, result: LoadResult) -> None:
             result.sections.append(Section(text=text, location=f"p.{i}", page=i, heading=f"{title} > p.{i}"))
 
 
-def _load_pdf(data: bytes, title: str, result: LoadResult) -> None:
+def _load_pdf(data: bytes, title: str, result: LoadResult, max_table_rows: int | None = None) -> None:
     try:
         import pdfplumber
         pdf = pdfplumber.open(io.BytesIO(data))
@@ -510,10 +513,10 @@ def _load_pdf(data: bytes, title: str, result: LoadResult) -> None:
             for k, grid in enumerate(tables, start=1):
                 base = f"p.{i} · table {k}"
                 result.sections += _small_table_sections(
-                    grid, name=f"Table {k} on page {i}", base=base, heading=f"{title} > {base}", page=i, result=result)
+                    grid, name=f"Table {k} on page {i}", base=base, heading=f"{title} > {base}", page=i, result=result, max_table_rows=max_table_rows)
 
 
-def _load_pptx(data: bytes, title: str, result: LoadResult) -> None:
+def _load_pptx(data: bytes, title: str, result: LoadResult, max_table_rows: int | None = None) -> None:
     _need("pptx", "python-pptx")
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
@@ -581,6 +584,9 @@ def _load_pptx(data: bytes, title: str, result: LoadResult) -> None:
                 n_tables += 1
                 rows = [[_cell_text(c.text) for c in r.cells] for r in sh.table.rows]
                 headers, trows = _prepare_grid(rows)
+                if max_table_rows is not None and len(trows) > max_table_rows:
+                    result.warn(f"Table {n_tables} on slide {i} has {len(trows)} rows; only the first {max_table_rows} are searchable.")
+                    trows = trows[:max_table_rows]
                 if trows:
                     body.append(f"Table {n_tables}: columns {' | '.join(headers)}")
                     body += [ln for ln in (_row_line(headers, r, k) for k, r in enumerate(trows, start=1)) if ln]
@@ -626,12 +632,12 @@ _LOADERS = {
     ".txt": _load_text,
     ".md": _load_markdown,
     ".xlsx": _load_xlsx,
-    ".csv": lambda d, t, r: _load_delimited(d, t, r, ".csv"),
-    ".tsv": lambda d, t, r: _load_delimited(d, t, r, ".tsv"),
+    ".csv": lambda d, t, r, **kw: _load_delimited(d, t, r, ".csv", **kw),
+    ".tsv": lambda d, t, r, **kw: _load_delimited(d, t, r, ".tsv", **kw),
 }
 
 
-def load_file(filename: str, data: bytes) -> LoadResult:
+def load_file(filename: str, data: bytes, *, max_table_rows: int | None = None) -> LoadResult:
     ext = PurePath(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise UnsupportedFileType(
@@ -639,7 +645,10 @@ def load_file(filename: str, data: bytes) -> LoadResult:
         )
     result = LoadResult()
     try:
-        _LOADERS[ext](data, PurePath(filename).stem, result)
+        if ext in {".xlsx", ".csv", ".tsv", ".md", ".docx", ".pdf", ".pptx"}:
+            _LOADERS[ext](data, PurePath(filename).stem, result, max_table_rows=max_table_rows)
+        else:
+            _LOADERS[ext](data, PurePath(filename).stem, result)
     except RuntimeError:
         raise  # e.g. a missing optional package: the message already says what to install
     except Exception as e:  # noqa: BLE001 - corrupt, encrypted or malformed file

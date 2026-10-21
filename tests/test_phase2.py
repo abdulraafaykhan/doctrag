@@ -50,12 +50,34 @@ class Collection:
 
     def matches(self, row, query):
         for key, value in query.items():
-            if isinstance(value, dict) and "$lt" in value:
-                if key not in row or not row[key] < value["$lt"]:
-                    return False
+            if key == "$or":
+                if not any(self.matches(row, clause) for clause in value): return False
+                continue
+            if key == "$and":
+                if not all(self.matches(row, clause) for clause in value): return False
+                continue
+            if isinstance(value, dict):
+                for op, expected in value.items():
+                    if op == "$exists":
+                        if (key in row) != expected: return False
+                    elif op == "$in":
+                        if row.get(key) not in expected: return False
+                    elif op == "$lt":
+                        if key not in row or not row[key] < expected: return False
+                    elif op == "$gt":
+                        if key not in row or not row[key] > expected: return False
+                    else: raise AssertionError(f"Unsupported fake query operator: {op}")
             elif row.get(key) != value:
                 return False
         return True
+
+    def apply_update(self, row, update):
+        row.update(copy.deepcopy(update.get("$set", {})))
+        for key, value in update.get("$inc", {}).items():
+            row[key] = row.get(key, 0) + value
+        for key, value in update.get("$max", {}).items():
+            if row.get(key) is None or row[key] < value:
+                row[key] = value
 
     async def find_one(self, query):
         self.queries.append(copy.deepcopy(query))
@@ -82,18 +104,18 @@ class Collection:
         self.queries.append(copy.deepcopy(query))
         for row in self.rows:
             if self.matches(row, query):
-                row.update(copy.deepcopy(update.get("$set", {})))
-                return SimpleNamespace(modified_count=1)
+                self.apply_update(row, update)
+                return SimpleNamespace(modified_count=1, matched_count=1)
         if upsert:
             self.rows.append(copy.deepcopy(update["$setOnInsert"]))
-        return SimpleNamespace(modified_count=0)
+        return SimpleNamespace(modified_count=0, matched_count=0)
 
     async def update_many(self, query, update):
         self.queries.append(copy.deepcopy(query))
         count = 0
         for row in self.rows:
             if self.matches(row, query):
-                row.update(update["$set"])
+                self.apply_update(row, update)
                 count += 1
         return SimpleNamespace(modified_count=count)
 
@@ -105,7 +127,7 @@ def world(monkeypatch):
                        "GROQ_API_KEY": "x", "GEMINI_API_KEY": "x", "CORS_ORIGINS": "http://localhost:8000"}.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
-    users, sessions, messages, logs, docs = [Collection() for _ in range(5)]
+    users, sessions, messages, logs, docs, chunks = [Collection() for _ in range(6)]
     encoded = security.hash_password("fake-password")
     for uid in ("a", "b"):
         users.rows.append({"_id": uid, "username": uid, "password_hash": encoded,
@@ -115,6 +137,8 @@ def world(monkeypatch):
     monkeypatch.setattr(auth_router, "login_throttle", LoginThrottle())
     monkeypatch.setattr(memory, "sessions_col", lambda: sessions)
     monkeypatch.setattr(memory, "messages_col", lambda: messages)
+    monkeypatch.setattr(memory, "documents_col", lambda: docs)
+    monkeypatch.setattr(memory, "chunks_col", lambda: chunks)
     monkeypatch.setattr(audit, "audit_log_col", lambda: logs)
     monkeypatch.setattr(maintenance, "documents_col", lambda: docs)
     from app import main
@@ -123,13 +147,13 @@ def world(monkeypatch):
     async def plan(*args):
         from app.services.router import Plan
         return Plan(question="Hello", action="greeting")
-    async def names(*args): return []
+    async def names(*args, **kwargs): return []
     monkeypatch.setattr(chat, "plan_turn", plan)
     monkeypatch.setattr(chat, "ready_document_names", names)
     async def status(): return "READY"
     monkeypatch.setattr(main, "vector_index_status", status)
     client = TestClient(main.app)
-    result = SimpleNamespace(client=client, users=users, sessions=sessions, messages=messages, logs=logs, docs=docs,
+    result = SimpleNamespace(client=client, users=users, sessions=sessions, messages=messages, logs=logs, docs=docs, chunks=chunks,
                              headers=lambda uid: {"Authorization": "Bearer " + security.create_access_token(uid)})
     yield result
     client.close()
@@ -202,8 +226,7 @@ def test_login_throttle_and_expiry(world, monkeypatch):
     ("get", "/auth/me", None), ("get", "/sessions", None), ("post", "/sessions", None),
     ("get", "/sessions/foreign/history", None), ("delete", "/sessions/foreign", None),
     ("post", "/chat", {"message": "hello", "session_id": "foreign"}),
-    ("get", "/documents", None), ("post", "/documents", None),
-    ("get", "/documents/123", None), ("delete", "/documents/123", None),
+    ("get", "/sessions/foreign/attachments", None), ("post", "/sessions/foreign/attachments", None),
 ])
 def test_all_api_routes_require_login(world, method, path, body):
     assert world.client.request(method, path, json=body).status_code == 401

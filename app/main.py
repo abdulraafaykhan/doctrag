@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
-from app.routers import chat, documents
+from app.routers import chat, attachments
 from app.auth.router import router as auth_router
 from app.config import get_settings
 from app.schemas import HealthResponse
@@ -37,7 +37,7 @@ app = FastAPI(title="doctrag", description="RAG over your documents, with multi-
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().allowed_origins, allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(auth_router)
-app.include_router(documents.router)
+app.include_router(attachments.router)
 app.include_router(chat.router)
 
 

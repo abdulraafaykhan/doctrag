@@ -1,10 +1,11 @@
 """Owned chat sessions and messages."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
 
-from app.db import messages_col, sessions_col
+from app.db import chunks_col, documents_col, messages_col, sessions_col
+from app.config import get_settings
 
 
 def _iso(dt: datetime) -> str:
@@ -27,19 +28,28 @@ async def require_session(session_id: str, user_id: str) -> dict:
 
 async def create_session(user_id: str) -> dict:
     now = datetime.now(timezone.utc)
-    row = {"_id": str(uuid4()), "user_id": user_id, "title": "", "created_at": now, "updated_at": now}
+    row = {"_id": str(uuid4()), "user_id": user_id, "title": "", "created_at": now, "updated_at": now, "attachment_count": 0}
     await sessions_col().insert_one(row)
     return public_session(row)
 
 
+async def touch_session(session_id: str, user_id: str) -> None:
+    await require_session(session_id, user_id)
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(days=get_settings().retention_days)
+    await sessions_col().update_one({"_id": session_id, "user_id": user_id}, {"$max": {"updated_at": now}})
+    fields = {"scope": "user", "owner_id": user_id, "session_id": session_id}
+    await documents_col().update_many(fields, {"$max": {"expires_at": expiry}})
+    await chunks_col().update_many(fields, {"$max": {"expires_at": expiry}})
+
+
 async def save_message(session_id: str, role: str, content: str, *, user_id: str,
-                       sources: list[dict] | None = None, created_at: datetime | None = None) -> None:
+                       sources: list[dict] | None = None, attachments: list[dict] | None = None, created_at: datetime | None = None) -> None:
     await require_session(session_id, user_id)
     await messages_col().insert_one({"session_id": session_id, "user_id": user_id,
-        "role": role, "content": content, "sources": sources or [],
+        "role": role, "content": content, "sources": sources or [], "attachments": attachments or [],
         "created_at": created_at or datetime.now(timezone.utc)})
-    await sessions_col().update_one({"_id": session_id, "user_id": user_id},
-                                    {"$set": {"updated_at": datetime.now(timezone.utc)}})
+    await touch_session(session_id, user_id)
     if role == "user":
         await sessions_col().update_one({"_id": session_id, "user_id": user_id, "title": ""},
                                         {"$set": {"title": content[:80]}})
@@ -72,4 +82,7 @@ async def clear_session(session_id: str, *, user_id: str) -> int:
     # Remove the session first so subsequent requests cannot continue it.
     await sessions_col().delete_one({"_id": session_id, "user_id": user_id})
     result = await messages_col().delete_many({"session_id": session_id, "user_id": user_id})
+    fields = {"scope": "user", "owner_id": user_id, "session_id": session_id}
+    await documents_col().delete_many(fields)
+    await chunks_col().delete_many(fields)
     return result.deleted_count

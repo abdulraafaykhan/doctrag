@@ -1,5 +1,4 @@
 """Orchestrates: register file -> load -> chunk -> embed -> store."""
-import hashlib
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -15,41 +14,15 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def register_document(filename: str, content_type: str, data: bytes) -> tuple[str, bool]:
-    """Create the document record. Returns (doc_id, is_duplicate).
-
-    If the exact same file was already ingested successfully, we reuse it instead of
-    paying for embeddings again.
-    """
-    file_hash = hashlib.sha256(data).hexdigest()
-    existing = await documents_col().find_one({"file_hash": file_hash, "status": "ready"})
-    if existing:
-        return str(existing["_id"]), True
-
-    result = await documents_col().insert_one(
-        {
-            "filename": filename,
-            "content_type": content_type,
-            "file_hash": file_hash,
-            "size_bytes": len(data),
-            "status": "processing",
-            "num_chunks": 0,
-            "error": None,
-            "warnings": [],
-            "created_at": _now(),
-        }
-    )
-    return str(result.inserted_id), False
-
-
-async def ingest_document(doc_id: str, filename: str, data: bytes) -> None:
+async def ingest_document(doc_id: str, filename: str, data: bytes, *, metadata: dict,
+                          max_chunks: int | None = None, max_table_rows: int | None = None) -> None:
     """Run the full pipeline for one document. Never raises: failures are stored on the doc."""
     try:
-        loaded = load_file(filename, data)
+        loaded = load_file(filename, data, max_table_rows=max_table_rows)
         warnings = list(loaded.warnings)
         chunks = chunk_sections(loaded.sections)
 
-        cap = get_settings().max_chunks_per_doc
+        cap = get_settings().max_chunks_per_doc if max_chunks is None else max_chunks
         if len(chunks) > cap:
             warnings.append(f"The file produced {len(chunks)} chunks; only the first {cap} were indexed.")
             chunks = chunks[:cap]
@@ -59,6 +32,7 @@ async def ingest_document(doc_id: str, filename: str, data: bytes) -> None:
 
         rows = [
             {
+                **metadata,
                 "doc_id": doc_id,
                 "filename": filename,
                 "chunk_index": c["chunk_index"],
@@ -72,12 +46,12 @@ async def ingest_document(doc_id: str, filename: str, data: bytes) -> None:
         ]
         await chunks_col().insert_many(rows)
         await documents_col().update_one(
-            {"_id": ObjectId(doc_id)},
+            {"_id": ObjectId(doc_id), **{k: v for k, v in metadata.items() if k != "expires_at"}},
             {"$set": {"status": "ready", "num_chunks": len(rows), "error": None, "warnings": warnings}},
         )
     except Exception as e:  # noqa: BLE001 - we want to record any failure
-        await chunks_col().delete_many({"doc_id": doc_id})  # no half-ingested documents
+        await chunks_col().delete_many({"doc_id": doc_id, **{k: v for k, v in metadata.items() if k != "expires_at"}})  # no half-ingested documents
         await documents_col().update_one(
-            {"_id": ObjectId(doc_id)},
+            {"_id": ObjectId(doc_id), **{k: v for k, v in metadata.items() if k != "expires_at"}},
             {"$set": {"status": "failed", "error": str(e)[:500]}},
         )

@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     history_turns: int = 6  # how many past messages are sent back to the LLM
     max_upload_mb: int = 20
 
+    retention_days: int = Field(default=30, ge=0)
+    attachment_wait_seconds: float = Field(default=60, ge=0)
+    user_upload_max_mb: int = Field(default=5, gt=0)
+    user_max_chunks_per_doc: int = Field(default=150, gt=0)
+    user_max_table_rows: int = Field(default=500, gt=0)
+
     # --- Tables / spreadsheets / slides ---
     table_chunk_chars: int = 1800   # a table chunk holds whole rows up to about this size
     max_table_rows: int = 5000      # rows per table that are made searchable (stats cover all rows)

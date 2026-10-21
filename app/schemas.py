@@ -7,9 +7,8 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     session_id: str = Field(min_length=1, description="Create a session with POST /sessions, then paste its session_id here.")
-    doc_ids: list[str] | None = Field(
-        default=None, description="Restrict the search to these documents. Empty list = search all documents."
-    )
+    attachment_ids: list[str] = Field(default_factory=list, max_length=5,
+        description="Optional attachment ids from this session. Existing files remain searchable for follow-ups.")
     stream: bool = Field(
         default=True,
         description="Stream tokens via SSE (default), or return one JSON reply. Use false in Swagger.",
@@ -23,7 +22,7 @@ class ChatRequest(BaseModel):
                 {
                     "message": "What is this document about?",
                     "session_id": "paste-session-id-here",
-                    "doc_ids": [],
+                    "attachment_ids": [],
                     "stream": False,
                 }
             ]
@@ -61,6 +60,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     sources: list[dict]
+    attachments: list[dict] = Field(default_factory=list)
     created_at: str
 
 
@@ -89,6 +89,12 @@ class UploadResponse(BaseModel):
     error: str | None = None
 
 
-class DocumentDeleted(BaseModel):
-    deleted: str
-    chunks_removed: int
+class AttachmentResponse(BaseModel):
+    id: str
+    filename: str
+    status: str
+    size_bytes: int
+    num_chunks: int
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str
+    expires_at: str

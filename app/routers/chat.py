@@ -10,6 +10,7 @@ from typing import Annotated
 
 from app.auth.security import CurrentUser, get_current_user
 from app.services.audit import audit_event
+from app.services.attachments import attachment_events, resolve_attachments
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import get_settings
@@ -17,7 +18,7 @@ from app.schemas import ChatError, ChatRequest, ChatResponse, SessionResponse, S
 from app.services.citations import CitationFilter
 from app.services.llm import FIXED_REPLIES, NOTHING_FOUND_MESSAGE, stream_answer
 from app.services.textfix import normalize
-from app.services.memory import clear_session, create_session, require_session, get_full_history, get_recent, list_sessions, save_message
+from app.services.memory import clear_session, create_session, require_session, touch_session, get_full_history, get_recent, list_sessions, save_message
 from app.services.retrieval import ready_document_names, search
 from app.services.router import plan_turn
 router = APIRouter(tags=["chat"], dependencies=[Depends(get_current_user)])
@@ -34,10 +35,10 @@ def _doc_source(h: dict) -> dict:
     }
 
 
-async def _documents(question: str, doc_ids: list[str] | None) -> list[dict]:
-    """Apply the relevance threshold even when documents are explicitly selected."""
+async def _documents(question: str, user: CurrentUser, session_id: str) -> list[dict]:
+    """Search only the shared library and the verified owner's current chat."""
     s = get_settings()
-    hits = await search(question, doc_ids=doc_ids)
+    hits = await search(question, owner_id=user.user_id, session_id=session_id)
     hits = [h for h in hits if h["score"] >= s.min_doc_score]
     return [_doc_source(h) for h in hits]
 
@@ -50,8 +51,13 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
     try:
         s = get_settings()
         history = await get_recent(session_id, s.history_turns, user_id=user.user_id)
-        doc_ids = req.doc_ids or None
-        names = await ready_document_names(doc_ids)
+        async for event in attachment_events(req.attachment_ids, user.user_id, session_id):
+            yield event
+            if event["type"] == "error":
+                return
+        attached = await resolve_attachments(req.attachment_ids, user.user_id, session_id) if req.attachment_ids else []
+        attachment_refs = [{"id": str(row["_id"]), "filename": row["filename"]} for row in attached]
+        names = await ready_document_names(owner_id=user.user_id, session_id=session_id)
 
         yield {"type": "status", "text": "Thinking…"}
         plan = await plan_turn(history, req.message, names)
@@ -59,7 +65,7 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
         fixed = FIXED_REPLIES.get(plan.action)
         if fixed is None:
             yield {"type": "status", "text": "Searching your documents…"}
-            sources = await _documents(plan.question, doc_ids)
+            sources = await _documents(plan.question, user, session_id)
             if not sources:
                 fixed = NOTHING_FOUND_MESSAGE
         for i, source in enumerate(sources, start=1):
@@ -69,7 +75,7 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
                "sources": public, "notes": [], "plan": {"action": plan.action}}
         if fixed is not None:
             yield {"type": "token", "t": fixed}
-            await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id)
+            await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id, attachments=attachment_refs)
             await save_message(session_id, "assistant", fixed, sources=[], user_id=user.user_id)
             await audit_event("chat", user_id=user.user_id, session_id=session_id)
             yield {"type": "done", "session_id": session_id, "cited": []}
@@ -89,7 +95,7 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
         answer = "".join(parts)
         stored_sources = [{**{k: v for k, v in src.items() if k != "snippet"}, "cited": src["n"] in flt.cited} for src in public]
         # Save only after a complete answer, so history never holds half-finished turns.
-        await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id)
+        await save_message(session_id, "user", req.message, created_at=asked_at, user_id=user.user_id, attachments=attachment_refs)
         await save_message(session_id, "assistant", answer, sources=stored_sources, user_id=user.user_id)
         await audit_event("chat", user_id=user.user_id, session_id=session_id)
         yield {"type": "done", "session_id": session_id, "cited": sorted(flt.cited)}
@@ -103,6 +109,8 @@ async def run_chat(req: ChatRequest, user: CurrentUser) -> AsyncIterator[dict]:
 @router.post("/chat", response_model=ChatResponse | ChatError)
 async def chat(req: ChatRequest, user: Annotated[CurrentUser, Depends(get_current_user)]):
     await require_session(req.session_id, user.user_id)
+    await resolve_attachments(req.attachment_ids, user.user_id, req.session_id)
+    await touch_session(req.session_id, user.user_id)
     if req.stream:
 
         async def event_stream():
