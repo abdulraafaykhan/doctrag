@@ -57,6 +57,8 @@ async def save_message(session_id: str, role: str, content: str, *, user_id: str
 
 async def get_recent(session_id: str, limit: int, *, user_id: str) -> list[dict]:
     await require_session(session_id, user_id)
+    if limit <= 0:
+        return []
     cursor = messages_col().find({"session_id": session_id, "user_id": user_id},
                                  {"_id": 0, "role": 1, "content": 1}).sort("created_at", -1).limit(limit)
     rows = await cursor.to_list()

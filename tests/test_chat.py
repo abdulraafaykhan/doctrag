@@ -211,7 +211,7 @@ def test_root_redirect_and_swagger_file_picker(monkeypatch):
     monkeypatch.setattr(_db, "vector_index_status", status, raising=False)
     from app import main
     async def sweep(): return 0
-    monkeypatch.setattr(main, "sweep_stuck_documents", sweep)
+    monkeypatch.setattr(main, "purge_expired", sweep)
     from fastapi.testclient import TestClient
     with TestClient(main.app) as client:
         response = client.get("/", follow_redirects=False)

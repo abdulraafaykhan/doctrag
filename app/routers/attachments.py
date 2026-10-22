@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.db import documents_col
 from app.schemas import AttachmentResponse, UploadResponse
 from app.services.document_store import ingest_scoped, register_document, user_scope
+from app.services.audit import audit_event
 from app.services.loaders import SUPPORTED_EXTENSIONS
 from app.services.memory import require_session, _iso
 
@@ -21,18 +22,22 @@ async def upload_attachments(session_id: str, background_tasks: BackgroundTasks,
     user: Annotated[CurrentUser, Depends(get_current_user)], files: list[UploadFile] = File(...)) -> list[dict]:
     await require_session(session_id, user.user_id)
     if not 1 <= len(files) <= 3:
+        await audit_event("upload", user_id=user.user_id, session_id=session_id, outcome="rejected")
         raise HTTPException(400, "Upload between 1 and 3 files at a time.")
     settings = get_settings()
     max_bytes = settings.user_upload_max_mb * 1024 * 1024
     results = []
     for file in files:
         name = PurePath(file.filename or "unnamed").name
+        outcome = "error"
         try:
             if PurePath(name).suffix.lower() not in SUPPORTED_EXTENSIONS:
+                outcome = "rejected"
                 results.append({"filename": name, "status": "rejected", "error": "Unsupported file type."})
                 continue
             data = await file.read(max_bytes + 1)
             if not data or len(data) > max_bytes:
+                outcome = "rejected"
                 results.append({"filename": name, "status": "rejected", "error": "File is empty or exceeds the upload size limit."})
                 continue
             try:
@@ -41,15 +46,18 @@ async def upload_attachments(session_id: str, background_tasks: BackgroundTasks,
             except HTTPException as exc:
                 if exc.status_code != 400:
                     raise
+                outcome = "rejected"
                 results.append({"filename": name, "status": "rejected", "error": exc.detail})
                 continue
             doc_id = str(row["_id"])
             if not duplicate:
                 background_tasks.add_task(ingest_scoped, doc_id, name, data,
                     scope="user", owner_id=user.user_id, session_id=session_id)
+            outcome = "duplicate" if duplicate else "accepted"
             results.append({"filename": name, "doc_id": doc_id, "status": row["status"], "duplicate": duplicate})
         finally:
             await file.close()
+            await audit_event("upload", user_id=user.user_id, session_id=session_id, outcome=outcome)
     return results
 
 

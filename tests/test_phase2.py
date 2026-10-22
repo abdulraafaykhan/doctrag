@@ -141,6 +141,9 @@ def world(monkeypatch):
     monkeypatch.setattr(memory, "chunks_col", lambda: chunks)
     monkeypatch.setattr(audit, "audit_log_col", lambda: logs)
     monkeypatch.setattr(maintenance, "documents_col", lambda: docs)
+    monkeypatch.setattr(maintenance, "sessions_col", lambda: sessions)
+    monkeypatch.setattr(maintenance, "messages_col", lambda: messages)
+    monkeypatch.setattr(maintenance, "chunks_col", lambda: chunks)
     from app import main
     from app.routers import chat
     main.app.dependency_overrides.clear()
@@ -349,7 +352,7 @@ def test_startup_sweep_and_cleanup(world, monkeypatch):
     async def close(): calls.append("close")
     monkeypatch.setattr(main, "connect_to_mongo", connect)
     monkeypatch.setattr(main, "ensure_indexes", indexes)
-    monkeypatch.setattr(main, "sweep_stuck_documents", sweep)
+    monkeypatch.setattr(main, "purge_expired", sweep)
     monkeypatch.setattr(main, "close_mongo", close)
     with TestClient(main.app):
         assert calls == ["connect", "indexes", "sweep"]

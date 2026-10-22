@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     mongodb_db_name: str = "rag_db"
     bank_db_name: str = "bank_db"
     bank_mongodb_uri: str = ""
-    router_history_messages: int = 4
-    router_message_chars: int = 400
+    router_history_messages: int = Field(default=4, gt=0)
+    router_message_chars: int = Field(default=300, gt=0)
 
     # --- Groq (chat LLM) ---
     groq_api_key: str
@@ -52,7 +52,15 @@ class Settings(BaseSettings):
     chunk_size: int = 800          # characters, for prose (PDF/DOCX/TXT/MD text, long slides)
     chunk_overlap: int = 120
     top_k: int = 5
-    history_turns: int = 6  # how many past messages are sent back to the LLM
+    history_max_messages: int = Field(default=12, ge=0)
+    history_token_budget: int = Field(default=1500, ge=0)
+    old_answer_trim_chars: int = Field(default=600, gt=0)
+    max_message_chars: int = Field(default=2000, gt=0)
+    max_passage_chars: int = Field(default=5000, ge=0)
+    answer_max_tokens: int = Field(default=700, gt=0)
+    prompt_token_ceiling: int = Field(default=5000, gt=0)
+    llm_max_concurrency: int = Field(default=2, gt=0)
+    chat_rate_per_minute: int = Field(default=6, gt=0)
     max_upload_mb: int = 20
 
     retention_days: int = Field(default=30, ge=0)

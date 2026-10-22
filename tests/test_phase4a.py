@@ -16,7 +16,7 @@ DEMO_USERS = next(ast.literal_eval(n.value) for n in ast.parse(Path("scripts/see
 def run(c): return asyncio.run(c)
 
 def test_schemas_no_identity():
-    assert set(reg.registry) == {"get_balances", "search_documents"}
+    assert set(reg.registry) == {"get_balances", "search_documents", "get_recent_transactions", "get_card_status"}
     for schema in reg.schemas():
         fields = json.dumps(schema["function"]["parameters"]).lower()
         assert not any(word in fields for word in ("customer", "user_id", "session_id", "account_number", "account_id"))
@@ -138,8 +138,9 @@ def test_account_answer_model_receives_result_once(monkeypatch):
     assert len(calls) == 1 and "INR 123.45" in calls[0]["messages"][-1]["content"]
 
 
-def test_only_first_valid_tool_honoured(monkeypatch):
+def test_two_valid_tools_honoured(monkeypatch):
     async def create(**kw):
         return NS(choices=[NS(message=NS(tool_calls=[NS(function=NS(name="get_balances", arguments="{}")), NS(function=NS(name="search_documents", arguments=json.dumps({"query":"fees"})))]))])
     monkeypatch.setattr(router, "client", lambda: NS(chat=NS(completions=NS(create=create))))
-    assert run(router.plan_turn([], "balance and fees", [])).action == "get_balances"
+    plan = run(router.plan_turn([], "balance and fees", []))
+    assert [call.name for call in plan.tool_calls()] == ["get_balances", "search_documents"]

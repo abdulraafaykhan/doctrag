@@ -4,7 +4,8 @@ Run with:  uv run uvicorn app.main:app --reload
 Then open: http://127.0.0.1:8000/docs    (Swagger: upload files and chat)
 
 """
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 
 from fastapi import FastAPI
@@ -17,18 +18,24 @@ from app.routers import chat, attachments
 from app.auth.router import router as auth_router
 from app.config import get_settings
 from app.schemas import HealthResponse
-from app.services.maintenance import sweep_stuck_documents
+from app.services.maintenance import purge_expired, retention_loop
 
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    cleanup_task = None
     try:
         await connect_to_mongo()
         await ensure_indexes()
-        await sweep_stuck_documents()
+        await purge_expired()
+        cleanup_task = asyncio.create_task(retention_loop())
         yield
     finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
         await close_bank()
         await close_mongo()
 

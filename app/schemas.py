@@ -1,11 +1,19 @@
 """Request models for the API."""
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from app.config import get_settings
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
+    message: str = Field(min_length=1, description="Maximum length is MAX_MESSAGE_CHARS (default 2000).")
+
+    @field_validator("message")
+    @classmethod
+    def message_limit(cls, value: str) -> str:
+        if len(value) > get_settings().max_message_chars:
+            raise ValueError("Message exceeds the configured character limit")
+        return value
     session_id: str = Field(min_length=1, description="Create a session with POST /sessions, then paste its session_id here.")
     attachment_ids: list[str] = Field(default_factory=list, max_length=5,
         description="Optional attachment ids from this session. Existing files remain searchable for follow-ups.")
