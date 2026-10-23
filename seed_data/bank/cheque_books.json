@@ -1,0 +1,11 @@
+[
+  {
+    "cheque_book_id": "CHQ-001",
+    "account_id": "ACC-001-01",
+    "leaves": 25,
+    "issued_on": "2026-08-01",
+    "series_start": "100001",
+    "series_end": "100025",
+    "status": "issued"
+  }
+]

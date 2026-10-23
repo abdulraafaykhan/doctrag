@@ -1,12 +1,14 @@
 """Request models for the API."""
 
-
 from pydantic import BaseModel, Field, field_validator
+
 from app.config import get_settings
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, description="Maximum length is MAX_MESSAGE_CHARS (default 2000).")
+    message: str = Field(
+        min_length=1, description="Maximum length is MAX_MESSAGE_CHARS (default 2000)."
+    )
 
     @field_validator("message")
     @classmethod
@@ -14,9 +16,12 @@ class ChatRequest(BaseModel):
         if len(value) > get_settings().max_message_chars:
             raise ValueError("Message exceeds the configured character limit")
         return value
-    session_id: str = Field(min_length=1, description="Create a session with POST /sessions, then paste its session_id here.")
-    attachment_ids: list[str] = Field(default_factory=list, max_length=5,
-        description="Optional attachment ids from this session. Existing files remain searchable for follow-ups.")
+
+    attachment_ids: list[str] = Field(
+        default_factory=list,
+        max_length=5,
+        description="Optional attachment ids from this session. Existing files remain searchable for follow-ups.",
+    )
     stream: bool = Field(
         default=True,
         description="Stream tokens via SSE (default), or return one JSON reply. Use false in Swagger.",
@@ -29,15 +34,16 @@ class ChatRequest(BaseModel):
             "examples": [
                 {
                     "message": "What is this document about?",
-                    "session_id": "paste-session-id-here",
                     "attachment_ids": [],
                     "stream": False,
                 }
             ]
-        }
+        },
     }
 
+
 class ChatResponse(BaseModel):
+    clear_history: bool = False
     session_id: str | None
     answer: str
     cited: list[int]
@@ -53,9 +59,6 @@ class ChatError(BaseModel):
 
 class SessionResponse(BaseModel):
     session_id: str
-    title: str
-    created_at: str
-    updated_at: str
 
 
 class SessionDeleted(BaseModel):
@@ -65,29 +68,17 @@ class SessionDeleted(BaseModel):
 
 class MessageResponse(BaseModel):
     session_id: str
-    user_id: str
     role: str
     content: str
     sources: list[dict]
     attachments: list[dict] = Field(default_factory=list)
+    account_cards: list[dict] = Field(default_factory=list)
     created_at: str
 
 
 class HealthResponse(BaseModel):
     status: str
     vector_index: str
-
-
-class DocumentResponse(BaseModel):
-    id: str
-    filename: str
-    content_type: str
-    size_bytes: int
-    status: str
-    num_chunks: int
-    error: str | None = None
-    warnings: list[str] = Field(default_factory=list)
-    created_at: str
 
 
 class UploadResponse(BaseModel):

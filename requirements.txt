@@ -14,20 +14,14 @@ anyio==4.15.1
     #   sse-starlette
     #   starlette
     #   watchfiles
-argon2-cffi==25.1.0
-    # via pwdlib
-argon2-cffi-bindings==26.1.0
-    # via argon2-cffi
 certifi==2026.7.22
     # via
     #   doctrag
     #   httpcore
     #   httpx
     #   requests
-cffi==2.1.1
-    # via
-    #   argon2-cffi-bindings
-    #   cryptography
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+    # via cryptography
 charset-normalizer==3.5.2
     # via
     #   pdfminer-six
@@ -116,13 +110,11 @@ pillow==12.3.0
     # via
     #   pdfplumber
     #   python-pptx
-pwdlib==0.3.1
-    # via doctrag
 pyasn1==0.6.4
     # via pyasn1-modules
 pyasn1-modules==0.4.2
     # via google-auth
-pycparser==3.11 ; implementation_name != 'PyPy'
+pycparser==3.11 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pydantic==2.14.1
     # via
@@ -135,8 +127,6 @@ pydantic==2.14.1
 pydantic-core==2.50.1
     # via pydantic
 pydantic-settings==2.16.0
-    # via doctrag
-pyjwt==2.15.1
     # via doctrag
 pymongo==4.19.0
     # via doctrag

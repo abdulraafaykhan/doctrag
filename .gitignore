@@ -46,3 +46,13 @@ Thumbs.db
 # Private keys and certificates
 *.pem
 *.key
+
+# Local evaluation questions, answers and timings
+eval/results/
+
+# Frontend dependencies and generated test artifacts
+frontend/node_modules/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo

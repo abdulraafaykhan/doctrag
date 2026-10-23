@@ -3,7 +3,6 @@
     { "type": "vector", "path": "embedding", "numDimensions": 768, "similarity": "cosine" },
     { "type": "filter", "path": "doc_id" },
     { "type": "filter", "path": "scope" },
-    { "type": "filter", "path": "owner_id" },
     { "type": "filter", "path": "session_id" }
   ]
 }

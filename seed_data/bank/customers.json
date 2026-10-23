@@ -1,0 +1,182 @@
+[
+  {
+    "customer_id": "CUST-001",
+    "full_name": "Harbourline Demo Customer 01",
+    "mobile": "9000000101",
+    "email": "demo01@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 1, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Savings account and active debit card"
+  },
+  {
+    "customer_id": "CUST-002",
+    "full_name": "Harbourline Demo Customer 02",
+    "mobile": "9000000102",
+    "email": "demo02@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 2, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Savings and current accounts"
+  },
+  {
+    "customer_id": "CUST-003",
+    "full_name": "Harbourline Demo Customer 03",
+    "mobile": "9000000103",
+    "email": "demo03@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 3, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Savings account and credit card"
+  },
+  {
+    "customer_id": "CUST-004",
+    "full_name": "Harbourline Demo Customer 04",
+    "mobile": "9000000104",
+    "email": "demo04@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 4, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Two savings accounts under one mobile"
+  },
+  {
+    "customer_id": "CUST-005",
+    "full_name": "Harbourline Demo Customer 05",
+    "mobile": "9000000105",
+    "email": "demo05@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 5, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Blocked debit card"
+  },
+  {
+    "customer_id": "CUST-006",
+    "full_name": "Harbourline Demo Customer 06",
+    "mobile": "9000000106",
+    "email": "demo06@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 6, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Cheque book ineligible"
+  },
+  {
+    "customer_id": "CUST-007",
+    "full_name": "Harbourline Demo Customer 07",
+    "mobile": "9000000107",
+    "email": "demo07@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 7, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "incomplete",
+    "customer_since": "2025-01-01",
+    "scenario": "Incomplete KYC"
+  },
+  {
+    "customer_id": "CUST-008",
+    "full_name": "Harbourline Demo Customer 08",
+    "mobile": "9000000108",
+    "email": "demo08@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 8, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "Pending cheque book request"
+  },
+  {
+    "customer_id": "CUST-009",
+    "full_name": "Harbourline Demo Customer 09",
+    "mobile": "9000000109",
+    "email": "demo09@example.invalid",
+    "date_of_birth": "1992-05-16",
+    "address": {
+      "line1": "Demo flat 9, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2025-01-01",
+    "scenario": "New account with little activity"
+  },
+  {
+    "customer_id": "CUST-010",
+    "full_name": "Harbourline Demo Customer 10",
+    "mobile": "9000000110",
+    "email": "demo10@example.invalid",
+    "date_of_birth": "1950-04-12",
+    "address": {
+      "line1": "Demo flat 10, Fictional Harbour House",
+      "line2": "Demonstration address only",
+      "locality": "Demo Nagar",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "400001"
+    },
+    "kyc_status": "complete",
+    "customer_since": "2010-01-01",
+    "scenario": "Senior citizen with a long history"
+  }
+]

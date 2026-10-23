@@ -1,25 +1,27 @@
 """FastAPI entry point.
 
-Run with:  uv run uvicorn app.main:app --reload
+Run with:  uv run uvicorn app.main:app --reload --no-proxy-headers
 Then open: http://127.0.0.1:8000/docs    (Swagger: upload files and chat)
 
 """
+
 import asyncio
 from contextlib import asynccontextmanager, suppress
-
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.bank.db import close_bank
-from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
-from app.routers import chat, attachments
-from app.auth.router import router as auth_router
 from app.config import get_settings
+from app.db import close_mongo, connect_to_mongo, ensure_indexes, vector_index_status
+from app.logging_setup import RequestLoggingMiddleware, configure_logging
+from app.routers import attachments, chat
 from app.schemas import HealthResponse
 from app.services.maintenance import purge_expired, retention_loop
-
 
 
 @asynccontextmanager
@@ -40,14 +42,42 @@ async def lifespan(app: FastAPI):
         await close_mongo()
 
 
-app = FastAPI(title="doctrag", description="RAG over your documents, with multi-turn chat.", lifespan=lifespan)
+configure_logging()
+app = FastAPI(
+    title="Harbourline Bank Assistant",
+    description="Anonymous bank chat with in-chat verification.",
+    lifespan=lifespan,
+)
 
 # Only explicitly configured browser origins may access the API.
-app.add_middleware(CORSMiddleware, allow_origins=get_settings().allowed_origins, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-app.include_router(auth_router)
+app.add_middleware(RequestLoggingMiddleware)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, error):
+    # Default validation bodies echo input, which could contain verification credentials.
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "The request could not be accepted. Check its fields and try again."
+        },
+    )
+
+
 app.include_router(attachments.router)
 app.include_router(chat.router)
+
+# Keep the API root and Swagger routes intact; Vite uses the same /app/ base.
+frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/app", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 
 # --- Swagger file-upload fix -------------------------------------------------------------
@@ -56,7 +86,10 @@ app.include_router(chat.router)
 # Swagger draws a real file picker for `format: binary`, so we rewrite the schema.
 def _fix_binary(node) -> None:
     if isinstance(node, dict):
-        if node.get("type") == "string" and node.get("contentMediaType") == "application/octet-stream":
+        if (
+            node.get("type") == "string"
+            and node.get("contentMediaType") == "application/octet-stream"
+        ):
             node.pop("contentMediaType")
             node["format"] = "binary"
         for value in node.values():

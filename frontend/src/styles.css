@@ -1,0 +1,340 @@
+/* Local system fonts keep the demo self-contained. */
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #213e37;
+  background: #f6f8f4;
+  line-height: 1.6;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid #d8e1d8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 13px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #33715e;
+  outline-offset: 3px;
+}
+small {
+  display: block;
+  color: #65786e;
+  font-size: 12px;
+}
+.full-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+.chat-shell {
+  max-width: 1100px;
+  margin: auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 32px;
+  border-bottom: 1px solid #dce4da;
+}
+.app-header strong {
+  font-size: 19px;
+}
+.conversation {
+  flex: 1;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 36px 24px;
+}
+.welcome {
+  padding: 80px 0;
+  max-width: 580px;
+}
+h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.2;
+  font-weight: 550;
+  letter-spacing: -1px;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #708371;
+}
+.message {
+  margin: 0 0 30px;
+  overflow-wrap: anywhere;
+}
+.message.user {
+  background: #eaf0e4;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-left: 10%;
+}
+.message.assistant {
+  padding: 12px 0;
+}
+.markdown {
+  line-height: 1.8;
+}
+.markdown p {
+  margin: 10px 0;
+}
+.markdown pre {
+  background: #eaf0e4;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 8px;
+}
+.markdown blockquote {
+  border-left: 3px solid #b9cbb6;
+  padding-left: 16px;
+  margin-left: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-size: 20px;
+}
+.citation {
+  display: inline-flex;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  margin: 0 3px;
+  background: #e4eddb;
+  border-radius: 5px;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+th,
+td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #dce5d5;
+  vertical-align: top;
+}
+th {
+  background: #edf3e6;
+  font-weight: 600;
+}
+.account-card {
+  border: 1px solid #d6e1cb;
+  background: #f1f6e9;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 14px 0;
+}
+.account-card header {
+  background: #e6efd9;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.account-card header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.balance-list,
+.bank-card-list {
+  padding: 0 16px;
+}
+.balance-row,
+.bank-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid #dae4d1;
+}
+.bank-card-row {
+  flex-wrap: wrap;
+}
+.balance-row b {
+  white-space: nowrap;
+}
+.card-status {
+  text-transform: capitalize;
+  font-size: 12px;
+  background: #dce9d1;
+  padding: 4px 9px;
+  border-radius: 12px;
+}
+.card-status.blocked,
+.card-status.expired {
+  background: #f6e2d9;
+}
+.empty-card {
+  padding: 16px;
+}
+.composer-area {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 12px 24px 20px;
+  background: #f6f8f4;
+}
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #cddac9;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 4px 20px #24452b08;
+}
+.composer textarea {
+  resize: vertical;
+  width: 100%;
+  min-height: 48px;
+  max-height: 180px;
+  border: 0;
+  background: transparent;
+  outline: 0;
+}
+.composer button {
+  border: 0;
+  padding: 9px;
+}
+.composer button[type="submit"] {
+  background: #204f3d;
+  color: white;
+}
+.fine-print,
+.muted {
+  color: #6b7c70;
+  font-size: 12px;
+}
+.fine-print {
+  text-align: center;
+  margin: 8px 0 0;
+}
+.notice {
+  padding: 12px 16px;
+  background: #fff2d6;
+  border: 1px solid #ead7a6;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.file-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.file-chip {
+  border: 1px solid #d2decc;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.file-chip button {
+  border: 0;
+  padding: 0 5px;
+  background: transparent;
+}
+.file-chip.failed,
+.file-chip.rejected {
+  background: #f9e6de;
+}
+.source-dialog {
+  border: 1px solid #cbd8c4;
+  border-radius: 14px;
+  width: min(650px, 92vw);
+  max-height: 85dvh;
+  padding: 24px;
+  color: inherit;
+}
+.source-dialog::backdrop {
+  background: #18322866;
+}
+.dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.source-excerpt {
+  white-space: pre-wrap;
+  background: #f0f4eb;
+  padding: 18px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .app-header {
+    padding: 16px;
+  }
+  .app-header strong {
+    font-size: 15px;
+  }
+  .app-header button {
+    font-size: 12px;
+    padding: 8px;
+  }
+  .conversation {
+    padding: 24px 16px;
+  }
+  .welcome {
+    padding: 50px 0;
+  }
+  .composer-area {
+    padding: 10px 12px;
+  }
+  .balance-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .account-card header {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}

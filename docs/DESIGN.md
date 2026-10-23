@@ -1,3 +1,5 @@
+> **Superseded in parts.** `docs/REDESIGN.md` overrides this file for authentication, sessions, ownership and the frontend login/sidebar. Where they disagree, follow REDESIGN.md.
+
 # Design: doctrag bank assistant
 
 Status: decisions are **locked** unless marked "open". Phases are in `docs/PHASES.md`. Rules for agents are in `AGENTS.md`.
@@ -42,12 +44,12 @@ Browser (React)                           Swagger (test harness)
    v
   chat orchestrator (app/routers/chat.py)
    1. load session (must belong to user) + token-budgeted history
-   2. router step  (llama-3.1-8b-instant) -> which tools, if any
+   2. router step  (openai/gpt-oss-20b) -> which tools, if any
    3. run tools in parallel, identity injected by the SERVER
         - search_documents -> Atlas $vectorSearch (shared + this user's chat files)
         - get_balances / get_recent_transactions / get_card_status -> app/bank service -> bank database
    4. fixed replies when no LLM is needed (greeting, refusal, no answer found)
-   5. one answer call (llama-3.3-70b-versatile), streamed
+   5. one answer call (openai/gpt-oss-120b), streamed
    6. output filters: citation filter, text normaliser, amount check
    7. save messages, write audit event
 ```
@@ -177,7 +179,7 @@ Tools exposed to the router:
 
 Purpose: decide which tools a message needs, without an extra answer-model call.
 
-- Model: `groq_rewrite_model` (`llama-3.1-8b-instant`). Separate rate limits from the answer model.
+- Model: `groq_rewrite_model` (`openai/gpt-oss-20b`). Separate rate limits from the answer model.
 - Input: the last `router_history_messages` messages (default 4), each cut to `router_message_chars` characters, the new message, a flag saying whether files are attached, and the tool descriptions.
 - It uses Groq's native tool-calling (`tools=`). Up to 2 tool calls per turn are honoured (so "what is the overdraft fee and what is my balance?" works in one turn).
 - Validation: every returned call is checked against the registry and its argument model. Unknown tools and bad arguments are dropped.
@@ -236,7 +238,7 @@ Protecting the limits:
 - `llm_max_concurrency` (default 2): a semaphore around Groq calls so extra requests wait rather than fail.
 - Per-user rate limit `chat_rate_per_minute` (default 6): over the limit returns 429 with a friendly message.
 - Catch Groq `RateLimitError`. If the retry-after is 10 seconds or less, wait and retry once. Otherwise return an `error` SSE event: "The assistant is busy. Please try again in about N seconds."
-- Router calls use the 8B model, which has its own limits. Fixed replies avoid LLM calls entirely.
+- Router calls use the GPT-OSS 20B model, which has its own limits. Fixed replies avoid LLM calls entirely.
 - Embedding: one query embedding per document question. Ingestion is the heavy part, which is why upload caps exist.
 
 ## 13. Security design
@@ -289,23 +291,6 @@ React + Vite (TypeScript), in `frontend/`. Dev server proxies API calls to port 
 - No money movement and no admin interface.
 - Live Groq, Gemini and Atlas behaviour is checked by hand and by the evaluation script, not by CI.
 - Uploaded text is processed by third-party AI providers.
-## 19. Clarifications
+## Groq model compatibility update
 
-### Phase 1
-- The forbidden-term search covers code, tests, config, README, pyproject.toml and requirements.txt. Exclude docs/, AGENTS.md, .git and .venv.
-- Phase 1 answers from provided documents regardless of subject. Choose out_of_scope only for requests plainly unrelated to banking and not about any uploaded document (for example, cricket results or writing a poem). When unsure, choose search_documents.
-- Fixed replies avoid the answer-model call; the small router call still happens.
-- Apply min_doc_score to every search, including explicitly selected documents. Empty retrieval returns the fixed nothing-found reply and never reaches the answer model.
-- Replace every existing answer prompt and all mode logic with BANK_SYSTEM_PROMPT. Router errors or malformed output fall back to search_documents using the original user message, with no general-knowledge fallback.
-- Chat errors sent to clients are generic. Log diagnostic details server-side without message content or raw exception text that could contain sensitive data. Stored ingestion errors remain unchanged.
-- Remove the static UI and redirect / to /docs. Preserve non-web tests in a separate file; delete only web-specific tests. Remove test_pipeline.py, chat_cli.py, upload_cli.py and list_models.py; check_db.py may stay.
-- Move pytest to dev dependencies using uv remove and uv add --dev, then regenerate requirements.txt with uv export. Remove stray pasted PowerShell from .gitignore while preserving its ignore rules.
-
-### Later phases
-- Users and sessions use UUID strings. Documents keep ObjectId internally; ids exposed through the API are strings.
-- Duplicate detection for user files uses (scope, owner_id, session_id, file_hash).
-- User documents live and die with their session. Refresh expires_at from the session's last activity on every message; purge them with the session.
-- Buffer answers for turns containing account data, validate the full text with the amount check, then send it. Document-only answers continue to stream.
-- Phase 2 authentication applies to API routes, with public exceptions /docs, /redoc, /openapi.json, /auth/login and /health.
-- Phase 3 may make minimal parameter-only changes to loaders.py, chunking.py and ingestion.py to pass max-chunk and max-table-row limits. No behaviour rewrites.
-- Integer-money rules apply to bank data and tool output only. Uploaded-table statistics may remain floats.
+Defaults are openai/gpt-oss-120b for answers and openai/gpt-oss-20b for routing. GPT-OSS routing encodes up to two data selections in one native select_tools call because these models do not support parallel native calls. The server still validates each registry argument model and runs the selected handlers in parallel. Both GPT-OSS requests use low reasoning effort and include_reasoning=false, not reasoning_format. Completion caps stay unchanged and use max_completion_tokens; hidden reasoning also consumes that budget. An empty or length-truncated answer produces a safe error rather than a saved successful answer. No built-in tools or extra LLM round trips are introduced.
