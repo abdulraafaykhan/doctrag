@@ -1,0 +1,152 @@
+[
+  {
+    "user_id": "usr_001",
+    "full_name": "Demo Customer 01",
+    "mobile": "9000000001",
+    "account_id": "acc_001",
+    "address": {
+      "line1": "DEMO ONLY Flat 1",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_002",
+    "full_name": "Demo Customer 02",
+    "mobile": "9000000002",
+    "account_id": "acc_002",
+    "address": {
+      "line1": "DEMO ONLY Flat 2",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_003",
+    "full_name": "Demo Customer 03",
+    "mobile": "9000000003",
+    "account_id": "acc_003",
+    "address": {
+      "line1": "DEMO ONLY Flat 3",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_004",
+    "full_name": "Demo Customer 04",
+    "mobile": "9000000004",
+    "account_id": "acc_004",
+    "address": {
+      "line1": "DEMO ONLY Flat 4",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_005",
+    "full_name": "Demo Customer 05",
+    "mobile": "9000000005",
+    "account_id": "acc_005",
+    "address": {
+      "line1": "DEMO ONLY Flat 5",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_006",
+    "full_name": "Demo Customer 06",
+    "mobile": "9000000006",
+    "account_id": "acc_006",
+    "address": {
+      "line1": "DEMO ONLY Flat 6",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_007",
+    "full_name": "Demo Customer 07",
+    "mobile": "9000000007",
+    "account_id": "acc_007",
+    "address": {
+      "line1": "DEMO ONLY Flat 7",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_008",
+    "full_name": "Demo Customer 08",
+    "mobile": "9000000008",
+    "account_id": "acc_008",
+    "address": {
+      "line1": "DEMO ONLY Flat 8",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_009",
+    "full_name": "Demo Customer 09",
+    "mobile": "9000000009",
+    "account_id": "acc_009",
+    "address": {
+      "line1": "DEMO ONLY Flat 9",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  },
+  {
+    "user_id": "usr_010",
+    "full_name": "Demo Customer 10",
+    "mobile": "9000000010",
+    "account_id": "acc_010",
+    "address": {
+      "line1": "DEMO ONLY Flat 10",
+      "line2": "Fictional Harbourline Colony",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pin": "000000"
+    },
+    "status": "active",
+    "created_at": "2026-06-28T12:00:00+00:00"
+  }
+]

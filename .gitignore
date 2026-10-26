@@ -3,3 +3,8 @@
 __pycache__/ 
 node_modules/ 
 *.pyc
+data/
+.pytest_cache/
+.ruff_cache/
+frontend/dist/
+*.egg-info/

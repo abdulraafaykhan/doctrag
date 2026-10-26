@@ -1,0 +1,112 @@
+[
+  {
+    "account_id": "acc_001",
+    "account_number": "000000000001",
+    "user_id": "usr_001",
+    "type": "savings",
+    "balance_paise": 5760000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_002",
+    "account_number": "000000000002",
+    "user_id": "usr_002",
+    "type": "current",
+    "balance_paise": 5600000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_003",
+    "account_number": "000000000003",
+    "user_id": "usr_003",
+    "type": "savings",
+    "balance_paise": 5440000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_004",
+    "account_number": "000000000004",
+    "user_id": "usr_004",
+    "type": "current",
+    "balance_paise": 5280000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_005",
+    "account_number": "000000000005",
+    "user_id": "usr_005",
+    "type": "savings",
+    "balance_paise": 5120000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_006",
+    "account_number": "000000000006",
+    "user_id": "usr_006",
+    "type": "current",
+    "balance_paise": 4960000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_007",
+    "account_number": "000000000007",
+    "user_id": "usr_007",
+    "type": "savings",
+    "balance_paise": 4800000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_008",
+    "account_number": "000000000008",
+    "user_id": "usr_008",
+    "type": "current",
+    "balance_paise": 4640000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_009",
+    "account_number": "000000000009",
+    "user_id": "usr_009",
+    "type": "savings",
+    "balance_paise": 4480000,
+    "currency": "INR",
+    "status": "active",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  },
+  {
+    "account_id": "acc_010",
+    "account_number": "000000000010",
+    "user_id": "usr_010",
+    "type": "current",
+    "balance_paise": 4320000,
+    "currency": "INR",
+    "status": "frozen",
+    "branch": "DEMO Mumbai",
+    "opened_on": "2026-06-28"
+  }
+]

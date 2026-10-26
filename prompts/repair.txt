@@ -1,0 +1,5 @@
+Your draft contained numbers that are not in the sources: {{bad_numbers}}.
+Rewrite the answer using ONLY numbers that appear in the sources below.
+If the sources do not contain the answer, say you don't have that
+information and offer a human.
+{{sources}}

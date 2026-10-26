@@ -1,0 +1,141 @@
+# All limits, model names and switches live here. Code must not hardcode any of them.
+# Free-tier numbers change often: confirm the marked ones in the Groq console and Google AI Studio.
+
+bank:
+  name: "Harbourline Bank"
+  city: "Mumbai"
+  currency: "INR"
+
+models:
+  # CONFIRM model ids in the Groq console / AI Studio before first run (they change).
+  agent: "groq/openai/gpt-oss-120b"          # CrewAI/LiteLLM id style: provider/model
+  agent_fallbacks:
+    - "groq/openai/gpt-oss-20b"
+    - "gemini/gemini-2.5-flash"
+  vlm: "gemini-2.5-flash"                    # google-genai model id, vision on cropped images only
+  embed: "gemini-embedding-001"
+  embed_dims: 768
+  reranker: "BAAI/bge-reranker-base"         # only used if features.reranker is true
+  temperature: 0.1
+
+features:
+  reranker: false        # needs extra install (sentence-transformers); keep off until eval needs it
+  docling: false
+  vlm: true
+  otp_demo_mode: true    # any 6 digits are accepted
+
+auth:
+  otp_length: 6
+  otp_expiry_minutes: 5
+  otp_max_attempts: 3
+  otp_max_resends: 3
+  lock_minutes: 10
+  session_idle_minutes: 15
+  held_messages_max: 3
+
+session:
+  expires_hours: 24
+  history_turns: 12
+
+agent:
+  max_steps: 4
+  max_tool_calls: 6
+  tool_retry: 1
+  max_message_chars: 4000
+
+flow:
+  idle_minutes: 15
+  pending_action_minutes: 15
+
+uploads:
+  max_mb: 10
+  max_files_per_session: 5
+  max_files_per_message: 5
+  digital_pages_per_file: 30
+  chunks_per_file: 120
+  chunks_per_session: 200
+  scanned_pages_per_file: 15
+  vlm_pages_per_file: 5
+  vlm_pages_per_session: 10
+  user_chunks_total: 5000
+  expiry_hours: 24
+  allowed_extensions: [pdf, pptx, docx, xlsx, csv, md, txt, png, jpg, jpeg, webp]
+
+quotas:                       # per Pacific day; CONFIRM real numbers in AI Studio
+  llm_requests_per_day: 1000
+  embed_requests_per_day: 1000
+  embed_reserved_for_queries: 300
+  embed_pace_per_minute: 80
+  vlm_requests_per_day: 100
+  upload_guard_percent: 70    # above this, new uploads wait
+
+chunking:
+  prose_tokens: [300, 400]
+  overlap_percent: 12
+  parent_max_tokens: 1000
+  table_max_tokens: 500
+  row_max_tokens: 80
+  rate_rows_cap: 5000
+  chars_per_token: 4
+
+ocr:
+  engine: "rapidocr"
+  min_confidence: 0.90
+  render_dpi: 250
+
+retrieval:
+  candidates_each: 20
+  rrf_k: 60
+  rerank_to: 6
+  parents_to_model: 5
+  context_token_budget: 4000
+  min_score: 0.55             # tune on the eval set
+
+statement:
+  presets: [last_5, last_10, last_30_days, custom]
+  max_range_days: 90
+  page_size: 50
+
+formats:
+  mobile_regex: "^[6-9][0-9]{9}$"
+  account_digits: 12
+  pin_digits: 6
+
+retention:
+  audit_log_days: 30
+  embed_cache_days: 7
+  embed_cache_max: 2000
+  image_cache_hours: 24
+
+logging:
+  level: "INFO"               # LOG_LEVEL in .env overrides
+  file: "data/logs/app.log"
+  mask_pii: true
+  max_bytes: 5242880
+  backup_count: 3
+  message_chars: 80
+  slow_query_ms: 300
+
+database:
+  name: harbourline
+  timeout_ms: 15000
+  max_pool_size: 10
+  index_poll_seconds: 5
+  index_wait_seconds: 600
+  vector_index: chunks_vector
+
+llm:
+  timeout_seconds: 60
+  retry_attempts: 2
+  retry_wait_seconds: 1
+
+money:
+  symbol: "₹"
+  decimal_places: 2
+  months_per_year: 12
+  rounding: ROUND_HALF_UP
+
+seed:
+  customers: 10
+  transactions_per_account: 48
+  history_days: 120

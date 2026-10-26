@@ -1,0 +1,32 @@
+name: debit_card
+title: "New debit card request"
+executor: submit_debit_card
+reference_prefix: "DC"
+steps:
+  - slot: card_type
+    question: "Which debit card would you like?"
+    type: choice
+    options:
+      - {value: standard, label: "Standard", synonyms: [standard, basic, normal, regular]}
+      - {value: premium, label: "Premium", synonyms: [premium, platinum, gold]}
+    on_invalid: "Please choose Standard or Premium."
+  - slot: address
+    question: "Should we deliver it to your address on file, or a different address?"
+    type: address
+    options:
+      - {value: on_file, label: "Address on file", synonyms: [yes, same, "on file", home]}
+      - {value: new, label: "Different address", synonyms: [new, different, other]}
+    new_address_fields:
+      line1: {min: 5, max: 120}
+      line2: {optional: true, max: 120}
+      city: {required: true}
+      state: {required: true}
+      pin: {digits: 6}
+    on_invalid: "Please share the full address with a 6-digit PIN code."
+expected_days: {standard: 10, premium: 10}
+summary_template: |
+  Please confirm your debit card request:
+  - Card: {card_type_label}
+  - Address: {address_text}
+confirm_buttons: [Confirm, Change, Cancel]
+success_template: "Your debit card request is submitted. Reference: {ref_no}. Expected by {expected_by}."

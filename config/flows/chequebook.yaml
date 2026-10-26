@@ -1,0 +1,41 @@
+name: chequebook
+title: "Cheque book request"
+executor: submit_chequebook
+reference_prefix: "CB"
+steps:
+  - slot: pages
+    question: "How many pages would you like in your cheque book?"
+    type: choice
+    options:
+      - {value: 20, label: "20 pages", synonyms: ["20", "twenty"]}
+      - {value: 40, label: "40 pages", synonyms: ["40", "forty"]}
+      - {value: 60, label: "60 pages", synonyms: ["60", "sixty"]}
+    on_invalid: "Cheque books come in 20, 40 or 60 pages. Which would you like?"
+  - slot: delivery
+    question: "Do you need emergency delivery or normal delivery?"
+    type: choice
+    options:
+      - {value: emergency, label: "Emergency (within 1 week)", synonyms: [urgent, fast, express, emergency, asap]}
+      - {value: normal, label: "Normal (20-30 days)", synonyms: [normal, regular, standard, usual]}
+    on_invalid: "Please choose emergency (within 1 week) or normal (20-30 days)."
+  - slot: address
+    question: "Should we deliver it to your address on file, or a different address?"
+    type: address
+    options:
+      - {value: on_file, label: "Address on file", synonyms: [yes, same, "on file", home]}
+      - {value: new, label: "Different address", synonyms: [new, different, other]}
+    new_address_fields:
+      line1: {min: 5, max: 120}
+      line2: {optional: true, max: 120}
+      city: {required: true}
+      state: {required: true}
+      pin: {digits: 6}
+    on_invalid: "Please share the full address with a 6-digit PIN code."
+expected_days: {emergency: 7, normal: 30}
+summary_template: |
+  Please confirm your cheque book request:
+  - Pages: {pages}
+  - Delivery: {delivery_label}
+  - Address: {address_text}
+confirm_buttons: [Confirm, Change, Cancel]
+success_template: "Your cheque book request is submitted. Reference: {ref_no}. Expected by {expected_by}."

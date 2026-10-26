@@ -1,0 +1,11 @@
+# Variants injected into {{auth_block}}, {{flow_block}}, {{docs_block}} by code.
+auth_block:
+  anonymous: "The customer is NOT logged in. Account actions need login: call start_authentication. Never guess account data."
+  verified: "The customer is logged in as {first_name}."
+flow_block:
+  none: ""
+  open: "Open request: {flow_title}. Filled: {filled}. Missing: {missing}. Next question: {next_question}. If the customer asks something else, answer it first, then repeat the next question."
+  confirming: "Open request: {flow_title}. A summary was shown and is waiting for the customer's confirmation. Answer side questions, then remind them to Confirm, Change or Cancel."
+docs_block:
+  none: "No uploaded files."
+  some: "Uploaded files: {files}. Questions about 'my file' use search_my_documents."

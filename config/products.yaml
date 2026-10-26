@@ -1,0 +1,13 @@
+# Product ids, aliases (used by the agent to pick a product filter) and allowed rate dimensions.
+products:
+  savings_account:   {label: "Savings account",      aliases: [savings, "saving account", "sb account"], dims: [segment]}
+  fixed_deposit:     {label: "Fixed deposit",        aliases: [fd, "term deposit"],                       dims: [tenure_months, segment]}
+  recurring_deposit: {label: "Recurring deposit",    aliases: [rd],                                       dims: [tenure_months, segment]}
+  home_loan:         {label: "Home loan",            aliases: ["housing loan", "mortgage"],               dims: [tenure_months, amount_rupees, segment]}
+  personal_loan:     {label: "Personal loan",        aliases: [pl],                                       dims: [tenure_months, amount_rupees, segment]}
+  car_loan:          {label: "Car loan",             aliases: ["auto loan", "vehicle loan"],              dims: [tenure_months, amount_rupees]}
+  credit_card:       {label: "Credit card",          aliases: [cc],                                       dims: [segment]}
+  debit_card:        {label: "Debit card",           aliases: [atm card],                                 dims: [segment]}
+  cheque_book:       {label: "Cheque book",          aliases: [chequebook, checkbook],                    dims: []}
+  fees_and_charges:  {label: "Fees and charges",     aliases: [charges, fees, "service charges"],         dims: [segment]}
+segments: [general, senior_citizen, staff, nri]

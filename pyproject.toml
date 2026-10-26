@@ -1,17 +1,48 @@
 [project]
 name = "bank-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Harbourline Bank demo assistant"
 readme = "README.md"
 authors = [
     { name = "abdulraafaykhan", email = "" }
 ]
-requires-python = ">=3.12"
-dependencies = []
-
-[project.scripts]
-bank-agent = "bank_agent:main"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "crewai",
+    "fastapi",
+    "filetype",
+    "google-genai",
+    "groq",
+    "httpx",
+    "numpy",
+    "onnxruntime",
+    "openpyxl",
+    "pandas",
+    "pdfplumber",
+    "pillow",
+    "pydantic",
+    "pydantic-settings",
+    "pymongo",
+    "pymupdf",
+    "python-docx",
+    "python-dotenv",
+    "python-multipart",
+    "python-pptx",
+    "pyyaml",
+    "rapidocr-onnxruntime",
+    "rich",
+    "tenacity",
+    "uvicorn[standard]",
+]
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "app"
+module-root = ""
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
