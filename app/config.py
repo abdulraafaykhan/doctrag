@@ -22,7 +22,10 @@ class Secrets(BaseSettings):
 class Models(BaseModel):
     agent: str = Field(min_length=1)
     agent_fallbacks: list[str] = Field(min_length=1)
-    vlm: str = Field(min_length=1)
+    vlm_ingest: str = Field(min_length=1)
+    vlm_ingest_fallbacks: list[str]
+    vlm_online: str = Field(min_length=1)
+    vlm_online_fallbacks: list[str]
     embed: str = Field(min_length=1)
     embed_dims: int = Field(gt=0)
     temperature: float
@@ -58,6 +61,9 @@ class Logging(BaseModel):
 
 class LLMOptions(BaseModel):
     timeout_seconds: float = Field(gt=0)
+    vlm_ingest_timeout_seconds: float = Field(gt=0)
+    vlm_online_timeout_seconds: float = Field(gt=0)
+    vision_json_retries: int = Field(ge=0)
     retry_attempts: int = Field(gt=0)
     retry_wait_seconds: float = Field(ge=0)
 

@@ -11,8 +11,13 @@ models:
   agent: "groq/openai/gpt-oss-120b"          # CrewAI/LiteLLM id style: provider/model
   agent_fallbacks:
     - "groq/openai/gpt-oss-20b"
-    - "gemini/gemini-2.5-flash"
-  vlm: "gemini-2.5-flash"                    # google-genai model id, vision on cropped images only
+    - "gemini/gemini-flash-lite-latest"
+  vlm_ingest: "gemini-3.5-flash"             # offline tables: accuracy first
+  vlm_ingest_fallbacks:
+    - "groq/qwen/qwen3.8-27b"
+  vlm_online: "groq/qwen/qwen3.8-27b"       # customer screenshots: speed first
+  vlm_online_fallbacks:
+    - "gemini-3.5-flash"
   embed: "gemini-embedding-001"
   embed_dims: 768
   reranker: "BAAI/bge-reranker-base"         # only used if features.reranker is true
@@ -125,7 +130,10 @@ database:
   vector_index: chunks_vector
 
 llm:
-  timeout_seconds: 60
+  timeout_seconds: 25
+  vlm_ingest_timeout_seconds: 90
+  vlm_online_timeout_seconds: 25
+  vision_json_retries: 1
   retry_attempts: 2
   retry_wait_seconds: 1
 

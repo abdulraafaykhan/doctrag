@@ -54,10 +54,11 @@ Python 3.12 via uv, venv at `.venv`. Backend FastAPI. Frontend React (Vite). Dat
 - There is **one full refactor pass** in the last phase. Do not refactor earlier.
 
 ## Git
-- Never run git push, git push --force, or anything that publishes the branch. The user pushes manually. Stage and commit only when told, and never amend or rewrite commits that already exist.
-- Commit at the end of each phase and after each test gate passes. Do not push unless asked.
-- Commit messages: short, literal and plain, readable at a glance, saying what actually happened (for example "add otp verify and session store"). No polished or marketing wording, no long bodies.
-- Never commit `.env`, `.venv`, `data/`, `node_modules`, `frontend/dist`.
+- Never run `git commit`, `git push`, `git add`, `git stash`, `git reset`, `git checkout`, `git rebase`, `git merge` or `git tag`.
+- Only these read-only Git commands are allowed: `git status`, `git diff`, `git log`, `git show`.
+- The user stages, commits and pushes manually. Continue all other work normally: edit files, run tests and run scripts.
+- Ignore every "Commit ..." line in `BUILD_PROMPTS.md` and all instructions in earlier messages that say to commit; these rules supersede them.
+- At the end of each phase, report which files changed so the user can commit them. Do not stage or commit anything.
 
 ## Config you must know exist
 Free-tier limits and model names change. Treat every number in `config/settings.yaml` as a default to confirm in the Groq console and Google AI Studio. Never hardcode them elsewhere.
