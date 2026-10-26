@@ -445,6 +445,7 @@ class LLMClient:
             ),
             upload=upload,
             count=len(texts),
+            retry=False,
         )
         vectors = []
         for embedding in result.embeddings or []:

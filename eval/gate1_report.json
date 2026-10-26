@@ -1,0 +1,1398 @@
+{
+  "day": "2026-10-26",
+  "failures": [],
+  "quota_before": {
+    "embed_requests": 1,
+    "vlm_requests": 11
+  },
+  "chunks": 70,
+  "retrieval": [
+    {
+      "query": "What identity documents are needed to open a savings account?",
+      "file": "savings_faq.md",
+      "contains": "identity proof",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b682f965e1020b3ec9a8b021"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_78bfb76407049ae82eb808e7"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_fee12b153bf93c0bc60d7633"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_1e71c305a2030179f65fe81a"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_77ae7a9336dffad4831301ce"
+        }
+      ]
+    },
+    {
+      "query": "What is the monthly average balance required for Harbour Savings?",
+      "file": "savings_faq.md",
+      "contains": "5000",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_77ae7a9336dffad4831301ce"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_78bfb76407049ae82eb808e7"
+        },
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b6e64369d86dd2b922418d4a"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_62601f20421f129a4c0d4913"
+        }
+      ]
+    },
+    {
+      "query": "Does a student savings account require a minimum balance?",
+      "file": "savings_faq.md",
+      "contains": "zero-balance",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_77ae7a9336dffad4831301ce"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b682f965e1020b3ec9a8b021"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_5d684da14c75f2f221533cb0"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b6e64369d86dd2b922418d4a"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_1e71c305a2030179f65fe81a"
+        }
+      ]
+    },
+    {
+      "query": "How can I register a nominee and what does it cost?",
+      "file": "savings_faq.md",
+      "contains": "nominee",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_1e71c305a2030179f65fe81a"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_970c926e9ef1b7dad5c8e26b"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_2ff4112a4b6a64f24dd3dd20"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_0c7ea2dab34a0b380b974ba7"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_26a58e5b6a98d60aa7c7fd82"
+        }
+      ]
+    },
+    {
+      "query": "When is savings interest credited?",
+      "file": "savings_faq.md",
+      "contains": "quarterly",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b6e64369d86dd2b922418d4a"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_78bfb76407049ae82eb808e7"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b682f965e1020b3ec9a8b021"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_fee12b153bf93c0bc60d7633"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_77ae7a9336dffad4831301ce"
+        }
+      ]
+    },
+    {
+      "query": "Can a joint account use either-or-survivor instructions?",
+      "file": "savings_faq.md",
+      "contains": "either-or-survivor",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_fee12b153bf93c0bc60d7633"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_1e71c305a2030179f65fe81a"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_2ff4112a4b6a64f24dd3dd20"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_78bfb76407049ae82eb808e7"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b682f965e1020b3ec9a8b021"
+        }
+      ]
+    },
+    {
+      "query": "How do I reset my mobile banking password?",
+      "file": "digital_faq.md",
+      "contains": "registered device",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_26a58e5b6a98d60aa7c7fd82"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_8b5bd43f16d9c317bc4033d1"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_7e786e4c9d270a4b31e32f02"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_9bfebe17de480639fce67bdc"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_40bf7450ee34fc0b0d547cd8"
+        }
+      ]
+    },
+    {
+      "query": "What should I do before retrying a pending UPI transfer?",
+      "file": "digital_faq.md",
+      "contains": "transaction reference",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_20db068242547e3be31320af"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_40bf7450ee34fc0b0d547cd8"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_6409b50b65e77de0d88cc954"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_8b5bd43f16d9c317bc4033d1"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_29adcc027d42aa0949980b21"
+        }
+      ]
+    },
+    {
+      "query": "Are NEFT transfers available on weekends?",
+      "file": "digital_faq.md",
+      "contains": "weekends",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_6409b50b65e77de0d88cc954"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_20db068242547e3be31320af"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_40bf7450ee34fc0b0d547cd8"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_236590d99e78939d6213fe21"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_8a6d0d2848f3cc8dbaa8523d"
+        }
+      ]
+    },
+    {
+      "query": "Are IMPS transfers immediate and available around the clock?",
+      "file": "digital_faq.md",
+      "contains": "immediate",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_40bf7450ee34fc0b0d547cd8"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_20db068242547e3be31320af"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_6409b50b65e77de0d88cc954"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_29adcc027d42aa0949980b21"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_8a6d0d2848f3cc8dbaa8523d"
+        }
+      ]
+    },
+    {
+      "query": "What is the cooling period after changing a mobile device?",
+      "file": "digital_faq.md",
+      "contains": "24 hours",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_8b5bd43f16d9c317bc4033d1"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_26a58e5b6a98d60aa7c7fd82"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_9bfebe17de480639fce67bdc"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_d8a15db7e66bc58513e7344f"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        }
+      ]
+    },
+    {
+      "query": "What should I do after losing my card or suspecting fraud?",
+      "file": "fraud_policy.txt",
+      "contains": "block",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_9bfebe17de480639fce67bdc"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_92b5c2961e982800b7aeb3f9"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_6a73431514d769e6be48f668"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_a2dd1a985f938a6b23e90dad"
+        }
+      ]
+    },
+    {
+      "query": "How soon will a complaint receive an acknowledgement?",
+      "file": "fraud_policy.txt",
+      "contains": "2 working days",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_6142b21b5034d27cfb77af82"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_8e400232051c702bf43f70e7"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_373b5fda22178362bc266efd"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_7cead3f744521a87ce4357c0"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_5854c77abd7a6bb631231fb9"
+        }
+      ]
+    },
+    {
+      "query": "When can an unresolved complaint go to the branch manager?",
+      "file": "fraud_policy.txt",
+      "contains": "7 working days",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_8e400232051c702bf43f70e7"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_6142b21b5034d27cfb77af82"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_9bfebe17de480639fce67bdc"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_1e71c305a2030179f65fe81a"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_2ff4112a4b6a64f24dd3dd20"
+        }
+      ]
+    },
+    {
+      "query": "What details should I keep for an unauthorised transaction dispute?",
+      "file": "fraud_policy.txt",
+      "contains": "disputed amount",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_5854c77abd7a6bb631231fb9"
+        },
+        {
+          "doc_id": "doc_b9b0262434b30f19427b2b9f",
+          "title": "Grievance and fraud reporting policy",
+          "chunk_id": "chk_9bfebe17de480639fce67bdc"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_40bf7450ee34fc0b0d547cd8"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_20db068242547e3be31320af"
+        }
+      ]
+    },
+    {
+      "query": "What are the age limits for a home loan applicant?",
+      "file": "loan_eligibility.pdf",
+      "contains": "21 to 65",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_a476002f4d64861269ee3445",
+          "title": "Loan eligibility summary",
+          "chunk_id": "chk_1321023e39a10998d5716c04"
+        },
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_5d684da14c75f2f221533cb0"
+        },
+        {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "title": "Deposit and loan interest rate card",
+          "chunk_id": "chk_5b3261ccba41295ac9ea3b23"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_adf222778efa2c3e9873b76f"
+        }
+      ]
+    },
+    {
+      "query": "How many salary slips and bank statements are needed for home loans?",
+      "file": "loan_eligibility.pdf",
+      "contains": "salary slips",
+      "hit": false,
+      "returned": [
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_d299c599c63d17a81a2ca393"
+        },
+        {
+          "doc_id": "doc_a476002f4d64861269ee3445",
+          "title": "Loan eligibility summary",
+          "chunk_id": "chk_1321023e39a10998d5716c04"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_62601f20421f129a4c0d4913"
+        },
+        {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "title": "Deposit and loan interest rate card",
+          "chunk_id": "chk_17c37251eb733238a2319dad"
+        }
+      ]
+    },
+    {
+      "query": "What is the minimum monthly income for a personal loan?",
+      "file": "loan_eligibility.pdf",
+      "contains": "25000",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_a476002f4d64861269ee3445",
+          "title": "Loan eligibility summary",
+          "chunk_id": "chk_645fe96d6c5997c34d6c2726"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_77ae7a9336dffad4831301ce"
+        },
+        {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "title": "Deposit and loan interest rate card",
+          "chunk_id": "chk_7ba2cf384c4d7e6fc1405116"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_adf222778efa2c3e9873b76f"
+        }
+      ]
+    },
+    {
+      "query": "What fraction of income may total debt obligations normally use?",
+      "file": "loan_eligibility.pdf",
+      "contains": "50 percent",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_306170bc78b4f00df8505953",
+          "title": "Savings account FAQ",
+          "chunk_id": "chk_b682f965e1020b3ec9a8b021"
+        },
+        {
+          "doc_id": "doc_a476002f4d64861269ee3445",
+          "title": "Loan eligibility summary",
+          "chunk_id": "chk_c514c33c926956572d43c129"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_87702dbd6504e5a3659ba590"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_20db068242547e3be31320af"
+        }
+      ]
+    },
+    {
+      "query": "Is there a prepayment charge on floating-rate individual home loans?",
+      "file": "loan_eligibility.pdf",
+      "contains": "no prepayment",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        },
+        {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "title": "Deposit and loan interest rate card",
+          "chunk_id": "chk_17c37251eb733238a2319dad"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_7da3aef0451b831f34de525a"
+        },
+        {
+          "doc_id": "doc_25b085aad7d5dddfed8df78d",
+          "title": "Illustrated fixed deposit rate card",
+          "chunk_id": "chk_26c1152c464182a45c497555"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_ee854ff72ebca38101279433"
+        }
+      ]
+    },
+    {
+      "query": "Can a frozen account request a cheque book?",
+      "file": "card_cheque_policy.docx",
+      "contains": "frozen",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_2ff4112a4b6a64f24dd3dd20"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_a1d6eefbe3f6b119678bf718"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4ff0dfb56fffc573fc27bf70"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_d8a15db7e66bc58513e7344f"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_5c9e09bd61e3e2f6559e174e"
+        }
+      ]
+    },
+    {
+      "query": "How many cheque leaves can I request?",
+      "file": "card_cheque_policy.docx",
+      "contains": "60 leaves",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_8a6d0d2848f3cc8dbaa8523d"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_970c926e9ef1b7dad5c8e26b"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_5c9e09bd61e3e2f6559e174e"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_2ff4112a4b6a64f24dd3dd20"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4ff0dfb56fffc573fc27bf70"
+        }
+      ]
+    },
+    {
+      "query": "How many cheque leaves are free each quarter?",
+      "file": "card_cheque_policy.docx",
+      "contains": "20 cheque leaves",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_970c926e9ef1b7dad5c8e26b"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_8a6d0d2848f3cc8dbaa8523d"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_5c9e09bd61e3e2f6559e174e"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4ff0dfb56fffc573fc27bf70"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_a1d6eefbe3f6b119678bf718"
+        }
+      ]
+    },
+    {
+      "query": "What fee applies to a replacement standard debit card?",
+      "file": "card_cheque_policy.docx",
+      "contains": "250",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_92b5c2961e982800b7aeb3f9"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_28f3d140615589c67c272a58"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_6a73431514d769e6be48f668"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_c59a0dd33983a0cd2e891771"
+        }
+      ]
+    },
+    {
+      "query": "How long does normal debit card delivery take?",
+      "file": "card_cheque_policy.docx",
+      "contains": "7 working days",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_c59a0dd33983a0cd2e891771"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_87702dbd6504e5a3659ba590"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_6a73431514d769e6be48f668"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_8a6d0d2848f3cc8dbaa8523d"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        }
+      ]
+    },
+    {
+      "query": "How long does emergency debit card delivery take?",
+      "file": "card_cheque_policy.docx",
+      "contains": "3 working days",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_c59a0dd33983a0cd2e891771"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_a2dd1a985f938a6b23e90dad"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_6a73431514d769e6be48f668"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4e0e708c89f2c04ade8b5dc2"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_92b5c2961e982800b7aeb3f9"
+        }
+      ]
+    },
+    {
+      "query": "NEFT charges",
+      "file": "fees.xlsx",
+      "contains": "NEFT charges",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_236590d99e78939d6213fe21"
+        },
+        {
+          "doc_id": "doc_a1f59ef243e70a1cab75ae9f",
+          "title": "Digital banking FAQ",
+          "chunk_id": "chk_6409b50b65e77de0d88cc954"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_4ff0dfb56fffc573fc27bf70"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_970c926e9ef1b7dad5c8e26b"
+        },
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        }
+      ]
+    },
+    {
+      "query": "What is the general fixed deposit rate for 24 months?",
+      "file": "rates.xlsx",
+      "contains": "7.35",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_25b085aad7d5dddfed8df78d",
+          "title": "Illustrated fixed deposit rate card",
+          "chunk_id": "chk_4aaf89e596b3cc57d4e24307"
+        },
+        {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "title": "Deposit and loan interest rate card",
+          "chunk_id": "chk_5672b45e1465626d29a97f83"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_ee854ff72ebca38101279433"
+        },
+        {
+          "doc_id": "doc_25b085aad7d5dddfed8df78d",
+          "title": "Illustrated fixed deposit rate card",
+          "chunk_id": "chk_3ab2fee92cb5d7591ef43935"
+        },
+        {
+          "doc_id": "doc_cac51d035ae2340e4b46186b",
+          "title": "Loan eligibility and credit rules",
+          "chunk_id": "chk_0699da28b4b9c9bf78b68d17"
+        }
+      ]
+    },
+    {
+      "query": "Is there a debit card issuance fee waiver for new salary accounts?",
+      "file": "offers.pptx",
+      "contains": "waiver",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_7cead3f744521a87ce4357c0"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_d299c599c63d17a81a2ca393"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_92b5c2961e982800b7aeb3f9"
+        },
+        {
+          "doc_id": "doc_786a5b064b5b87912d624f9a",
+          "title": "Cheque book and debit card policy",
+          "chunk_id": "chk_6a73431514d769e6be48f668"
+        },
+        {
+          "doc_id": "doc_f09590f9c09118576edce12e",
+          "title": "Fees and charges schedule",
+          "chunk_id": "chk_28f3d140615589c67c272a58"
+        }
+      ]
+    },
+    {
+      "query": "When must the first salary arrive to qualify for the new customer offer?",
+      "file": "offers.pptx",
+      "contains": "60 days",
+      "hit": true,
+      "returned": [
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_d299c599c63d17a81a2ca393"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_62601f20421f129a4c0d4913"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_7cead3f744521a87ce4357c0"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_4d866a9be14de9af1b4c3f85"
+        },
+        {
+          "doc_id": "doc_55f3c70b49e0e3904dd74bc4",
+          "title": "New customer offers",
+          "chunk_id": "chk_c2514bf936aebfd06b2b50b3"
+        }
+      ]
+    }
+  ],
+  "hit_rate_top5": 0.9666666666666667,
+  "extraction": [
+    {
+      "image": "rates_00.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_01.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_02.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_03.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_04.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": true,
+      "flags": [
+        "unreadable_cell:2:0",
+        "unreadable_cell:2:1",
+        "unreadable_cell:2:2",
+        "unreadable_cell:2:3",
+        "truncated"
+      ],
+      "wrong_accepted": 0,
+      "truncated": true,
+      "mismatches": []
+    },
+    {
+      "image": "rates_05.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_06.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_07.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_08.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_09.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": true,
+      "flags": [
+        "unreadable_cell:2:0",
+        "unreadable_cell:2:1",
+        "unreadable_cell:2:2",
+        "unreadable_cell:2:3",
+        "truncated"
+      ],
+      "wrong_accepted": 0,
+      "truncated": true,
+      "mismatches": []
+    },
+    {
+      "image": "rates_10.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_11.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_12.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_13.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_14.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": true,
+      "flags": [
+        "unreadable_cell:2:0",
+        "unreadable_cell:2:1",
+        "unreadable_cell:2:2",
+        "unreadable_cell:2:3",
+        "truncated"
+      ],
+      "wrong_accepted": 0,
+      "truncated": true,
+      "mismatches": []
+    },
+    {
+      "image": "rates_15.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_16.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_17.png",
+      "correct": 0,
+      "total": 12,
+      "flagged": true,
+      "flags": [
+        "missing_table_structure",
+        "unreadable_image",
+        "unverified_numeric_image"
+      ],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": [
+        {
+          "row": 0,
+          "col": 0,
+          "expected": "12",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 1,
+          "expected": "6.67%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 2,
+          "expected": "7.17%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 3,
+          "expected": "01 Oct 2026",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 0,
+          "expected": "24",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 1,
+          "expected": "6.77%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 2,
+          "expected": "7.27%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 3,
+          "expected": "01 Oct 2026",
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "expected": "36",
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 1,
+          "expected": "6.87%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 2,
+          "expected": "7.37%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 3,
+          "expected": "01 Oct 2026",
+          "actual": "<missing>"
+        }
+      ]
+    },
+    {
+      "image": "rates_18.png",
+      "correct": 12,
+      "total": 12,
+      "flagged": false,
+      "flags": [],
+      "wrong_accepted": 0,
+      "truncated": false,
+      "mismatches": []
+    },
+    {
+      "image": "rates_19.png",
+      "correct": 0,
+      "total": 12,
+      "flagged": true,
+      "flags": [
+        "missing_table_structure",
+        "unreadable_image",
+        "unverified_numeric_image",
+        "truncated"
+      ],
+      "wrong_accepted": 0,
+      "truncated": true,
+      "mismatches": [
+        {
+          "row": 0,
+          "col": 0,
+          "expected": "12",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 1,
+          "expected": "6.69%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 2,
+          "expected": "7.19%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 0,
+          "col": 3,
+          "expected": "01 Oct 2026",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 0,
+          "expected": "24",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 1,
+          "expected": "6.79%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 2,
+          "expected": "7.29%",
+          "actual": "<missing>"
+        },
+        {
+          "row": 1,
+          "col": 3,
+          "expected": "01 Oct 2026",
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 0,
+          "expected": null,
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 1,
+          "expected": null,
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 2,
+          "expected": null,
+          "actual": "<missing>"
+        },
+        {
+          "row": 2,
+          "col": 3,
+          "expected": null,
+          "actual": "<missing>"
+        }
+      ]
+    }
+  ],
+  "cells_correct": 216,
+  "cells_total": 240,
+  "flagged_items": 5,
+  "wrong_numbers_accepted_unflagged": 0,
+  "unreadable_images": [
+    "rates_17.png",
+    "rates_19.png"
+  ],
+  "limitations": [
+    "Optional reranker is disabled and was not exercised.",
+    "Both providers returned rate limits for some images; cached unreadable results remain flagged, not accepted extractions."
+  ],
+  "quota_after": {
+    "embed_requests": 101,
+    "vlm_requests": 38
+  },
+  "quota_used": {
+    "embed_requests": 100,
+    "vlm_requests": 27
+  },
+  "passed": true
+}

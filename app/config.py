@@ -29,6 +29,7 @@ class Models(BaseModel):
     embed: str = Field(min_length=1)
     embed_dims: int = Field(gt=0)
     temperature: float
+    reranker: str
 
 
 class Quotas(BaseModel):
@@ -91,6 +92,7 @@ class Settings(BaseModel):
     retention: dict[str, Any]
     money: dict[str, Any]
     seed: dict[str, Any]
+    knowledge: dict[str, Any]
     messages: dict[str, Any]
     products: dict[str, Any]
     prompts: dict[str, Any]
@@ -133,6 +135,7 @@ def load_settings(root: Path = ROOT, secrets: Secrets | None = None) -> Settings
             prompts=prompts,
             messages=_yaml(root / "config/messages.yaml"),
             products=_yaml(root / "config/products.yaml"),
+            knowledge=_yaml(root / "config/knowledge.yaml"),
         )
         if credentials.log_level:
             settings.logging.level = credentials.log_level

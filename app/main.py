@@ -44,7 +44,14 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 "Required indexes are not READY; run scripts/create_indexes.py"
             )
-        yield
+        from app.uploads import UploadWorker
+
+        worker = UploadWorker()
+        worker.start()
+        try:
+            yield
+        finally:
+            worker.stop()
     finally:
         close_db()
 

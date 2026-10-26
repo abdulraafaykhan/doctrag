@@ -88,7 +88,9 @@ def normal_indexes() -> dict[str, list[tuple[list[tuple[str, int]], dict]]]:
                 {"name": "chunks_text", "default_language": "english"},
             ),
         ],
-        "rate_rows": [plain("product", "lifecycle"), plain("table_id")],
+        "rate_rows": [plain("product", "lifecycle"), plain("table_id"), ttl],
+        "rate_tables": [plain("doc_id"), ttl],
+        "ingest_jobs": [plain("doc_id")],
         "embed_cache": [unique("key"), ttl],
         "image_cache": [
             ([("image_hash", ASCENDING), ("owner_key", ASCENDING)], {"unique": True}),

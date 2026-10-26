@@ -9,3 +9,6 @@
 - Live check: LiteLLM is absent; native CrewAI uses https://api.groq.com/openai/v1 and preserves openai/gpt-oss-120b or openai/gpt-oss-20b after stripping only the groq/ routing prefix (CrewAI otherwise strips openai/ too).
 - Vision benchmark: select pinned gemini-3.5-flash for exact rate cells and conservative nulls on cut-off rows; use groq/qwen/qwen3.8-27b on 429, 5xx or timeout, then masked local OCR if all vision providers fail.
 - Vision modes: ingest uses Gemini then Groq at 90 s; online uses Groq then Gemini at 25 s; require JSON with one parse retry, OCR-backed notes/numeric tokens, and null cut-off rows from model flags or caller-supplied zero-based crop geometry.
+- Phase 2: sample ingestion stores parsed chunks once with embeddings deferred; Gate 1 alone makes real embedding requests, and resumptions fill only missing vectors using both test-cache and MongoDB caches.
+- Phase 2: image hashes use normalized pixels to deduplicate container encodings; bottom-edge ink identifies clipped rows, which are null and review-flagged even when a provider omits them.
+- Phase 2: extraction gate counts unreadable provider responses as flagged missing cells, never successful extraction; a passed safety gate does not imply every image was readable.

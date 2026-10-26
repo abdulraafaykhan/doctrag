@@ -1,0 +1,58 @@
+parsing:
+  digital_min_chars: 30
+  header_scan_rows: 12
+  max_input_tokens: 2048
+  executable_extensions: [exe, dll, bat, cmd, ps1, com, scr, msi, js, vbs]
+  zip_ratio_limit: 200
+  zip_uncompressed_mb: 100
+  pdf_password_error: "Password-protected documents are not supported."
+  corrupt_error: "This file is corrupt or does not match its extension."
+  unsupported_error: "This file type is not supported."
+  too_large_error: "This file exceeds the configured upload size."
+images:
+  decorative_min_area: 4096
+  upscale_width: 1000
+  crop_padding: 12
+  edge_margin: 8
+  edge_ink_pixels: 20
+  cache_version: 2
+  paragraph_min_words: 8
+  paragraph_min_density: 0.00001
+  blur_variance_min: 8
+  rate_min_percent: 0
+  rate_max_percent: 40
+  numeric_keywords: [rate, fee, charge, limit, amount, balance, total, interest, payment]
+  table_keywords: [tenure, general, senior, effective, rate, segment]
+  form_keywords: [account, beneficiary, utr, reference, payment, balance]
+  chart_keywords: [chart, axis, growth, trend]
+embedding:
+  batch_size: 16
+  retry_attempts: 3
+  retry_backoff_seconds: 1
+retrieval:
+  top_k: 5
+  max_top_k: 6
+  min_query_chars: 3
+  max_query_chars: 300
+  vector_num_candidates: 100
+  index_wait_seconds: 180
+  index_poll_seconds: 3
+  tenure_max_months: 480
+  rate_keys: [rate_percent, fee_percent, amount_paise]
+worker:
+  poll_seconds: 2
+  cleanup_seconds: 60
+  shutdown_seconds: 10
+messages:
+  unreadable: "I cannot read this image reliably. Please send a clearer crop."
+  confirm_numbers: "The image readings disagree. Please confirm the value before using it."
+  partial: "Processed {done} of {total} pages; the remaining pages exceed the upload limit."
+  chunks_partial: "Only the chunks within your upload allowance were processed."
+  quota_wait: "Upload processing is waiting for the embedding budget; bank questions remain available."
+  missing_dimensions: "Please provide: {fields}."
+  not_found: "No matching information was found."
+  no_documents: "No processed documents are available."
+  upload_limit: "The session upload allowance has been reached."
+  inaccessible: "This file is unavailable for this session."
+  invalid_argument: "Invalid argument: {field}."
+  invalid_numeric: "Numeric OCR and vision readings disagree."
