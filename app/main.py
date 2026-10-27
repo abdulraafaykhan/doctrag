@@ -1,7 +1,6 @@
 """Application factory, startup checks and production UI serving."""
 
 from contextlib import asynccontextmanager
-from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -60,20 +59,14 @@ async def lifespan(app: FastAPI):
 
 
 async def request_logging(request, call_next):
-    started = perf_counter()
-    status = 500
-    try:
-        response = await call_next(request)
-        status = response.status_code
-        return response
-    finally:
-        log.step(
-            "API",
-            "request",
-            route=request.url.path,
-            status=status,
-            ms=round((perf_counter() - started) * 1000),
-        )
+    if request.method == 'POST' and request.url.path in {'/api/chat', '/api/upload'}:
+        # A mutable context value carries timing from threadpool endpoints to middleware.
+        with log.request('chat' if request.url.path == '/api/chat' else 'upload'):
+            return await call_next(request)
+    response = await call_next(request)
+    log.step('API', 'heartbeat' if request.url.path == '/api/session' and request.method == 'GET' else 'request',
+             route=request.url.path, status=response.status_code, level='DEBUG')
+    return response
 
 
 def health():

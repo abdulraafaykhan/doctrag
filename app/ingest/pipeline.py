@@ -188,7 +188,9 @@ class Pipeline:
                         else "confirm_numbers"
                     )
                     document["warnings"].append(cfg.knowledge["messages"][message])
-                sections, chunks = chunk_elements(resolved, document)
+                log.step('INGEST', 'stage', doc=document['doc_id'], stage='chunk')
+                with log.span('CHUNK', 'build chunks'):
+                    sections, chunks = chunk_elements(resolved, document)
                 if customer:
                     session = (
                         self.store.one("sessions", {"session_id": owner_key}) or {}
@@ -282,10 +284,9 @@ class Pipeline:
         try:
             for start in range(0, len(missing), size):
                 batch = missing[start : start + size]
-                vectors = self.embeddings.embed(
-                    [row["text"] for row in batch],
-                    upload=document["namespace"] == "user",
-                )
+                with log.span('EMBED', 'embed chunks', count=len(batch)):
+                    vectors = self.embeddings.embed(
+                        [row["text"] for row in batch], upload=document["namespace"] == "user")
                 for row, vector in zip(batch, vectors, strict=True):
                     self.store.patch(
                         "chunks",

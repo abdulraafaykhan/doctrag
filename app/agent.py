@@ -2,10 +2,7 @@
 
 import json
 import os
-import re
 from datetime import date
-from time import time, sleep
-from threading import Lock
 
 # Crew telemetry is unnecessary for banking data; disable it before importing the framework.
 for _key in ('CREWAI_TRACING_ENABLED', 'CREWAI_TELEMETRY_ENABLED', 'LITELLM_TELEMETRY'):
@@ -23,47 +20,12 @@ from app.llm import QuotaGuard, _vision_fallback_error
 from app.log import log, mask_text, mask_payload
 from app.verify import check, canonical_citations
 
-_pace_lock = Lock()
-_reservations = []
-
-
-def pace(tokens, *, enabled=True):
-    if not enabled:
-        return
-    cfg = get_settings().conversation['agent']
-    cap = cfg['free_tpm'] * cfg['token_safety_fraction']
-    if tokens > cap:
-        raise ValueError('Request exceeds configured free-tier token budget')
-    with _pace_lock:
-        state = ROOT / 'data/test_cache/groq_pacing.json'
-        if state.exists():
-            _reservations[:] = json.loads(state.read_text())
-        while True:
-            now = time()
-            _reservations[:] = [(stamp, amount) for stamp, amount in _reservations if now - stamp < 60]
-            if sum(amount for _, amount in _reservations) + tokens <= cap and len(_reservations) < cfg['free_rpm']:
-                _reservations.append((now, tokens))
-                state.parent.mkdir(parents=True, exist_ok=True)
-                state.write_text(json.dumps(_reservations))
-                return now
-            wait = min(30, max(0.1, 60 - (now - _reservations[0][0])))
-            log.step('LLM', 'free-tier pacing', seconds=round(wait))
-            sleep(wait)
-
-
-def settle(stamp, tokens):
-    with _pace_lock:
-        state = ROOT / 'data/test_cache/groq_pacing.json'
-        reservations = json.loads(state.read_text()) if state.exists() else []
-        reservations = [(when, tokens if when == stamp else amount) for when, amount in reservations]
-        state.write_text(json.dumps(reservations))
-
 
 class LoggedTransport(httpx.BaseTransport):
-    def __init__(self, quota, usage, *, cache=False, sample='', pacing=True, schemas=None, validators=None):
+    def __init__(self, quota, usage, *, cache=False, sample='', schemas=None, validators=None):
         self.inner = httpx.HTTPTransport()
         self.quota, self.usage = quota, usage
-        self.cache, self.sample, self.pacing = cache, sample, pacing
+        self.cache, self.sample = cache, sample
         self.schemas = schemas or {}
         self.validators = validators or {}
 
@@ -121,52 +83,24 @@ class LoggedTransport(httpx.BaseTransport):
             saved = json.loads(path.read_text(encoding='utf-8'))
             self.usage.append({**saved['usage'], 'cached': True, 'tool_proposals': self.proposals(saved['payload'])})
             return httpx.Response(200, json=saved['payload'], headers=saved.get('headers', {}))
-        estimate = int((len(json.dumps(body['messages'], ensure_ascii=False)) // cfg.chunking['chars_per_token']
-                    + len(json.dumps(body.get('tools', []))) // cfg.conversation['agent']['schema_chars_per_token']
-                    + cfg.conversation['agent']['protocol_overhead_tokens']) * cfg.conversation['agent']['input_token_multiplier']) + cfg.conversation['agent']['max_output_tokens']
-        backoffs = [0, *cfg.conversation['agent']['backoff_seconds']] if self.cache else [0]
-        for attempt, backoff in enumerate(backoffs):
-            if backoff:
-                log.step('LLM', '429 backoff', seconds=backoff)
-                sleep(backoff)
-            reservation = pace(estimate, enabled=self.pacing)
-            self.quota.reserve('llm')
-            outbound = httpx.Request(request.method, request.url, headers=request.headers, content=payload, extensions=request.extensions)
-            outbound.headers['content-length'] = str(len(payload))
-            with log.span('LLM', 'CrewAI native request', model=body['model'], attempt=attempt + 1):
-                response = self.inner.handle_request(outbound)
-                response.read()
-            log.step('LLM', 'provider status', status=response.status_code, reserved_tokens=estimate, tpm=response.headers.get('x-ratelimit-limit-tokens'), remaining=response.headers.get('x-ratelimit-remaining-tokens'))
-            if response.status_code >= 400:
-                log.step('LLM', 'provider error', detail=response.text)
-            if self.cache and response.status_code == 429 and 'tokens per day' in response.text.lower():
-                # Evaluation waits for free quota; interactive turns retain their fast fallback.
-                self.wait_for_daily_quota(response, cfg)
-            if response.status_code != 429:
-                break
+        self.quota.reserve('llm')
+        outbound = httpx.Request(request.method, request.url, headers=request.headers, content=payload, extensions=request.extensions)
+        outbound.headers['content-length'] = str(len(payload))
+        with log.span('LLM', 'CrewAI native request', model=body['model']):
+            response = self.inner.handle_request(outbound)
+            response.read()
+        log.step('LLM', 'provider status', status=response.status_code)
+        if response.status_code >= 400:
+            log.step('LLM', 'provider error', detail=response.text)
         if response.status_code == 200:
             result = response.json()
             usage = result.get('usage', {})
-            if self.pacing:
-                settle(reservation, usage.get('total_tokens', estimate))
             self.usage.append({**usage, 'cached': False, 'model': body['model'], 'tpm': response.headers.get('x-ratelimit-limit-tokens'), 'tool_proposals': self.proposals(result)})
             log.step('LLM', 'token usage', **usage)
             if self.cache:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps({'payload': result, 'usage': self.usage[-1], 'headers': {key: value for key, value in response.headers.items() if key.startswith('x-ratelimit-')}}), encoding='utf-8')
         return response
-
-    def wait_for_daily_quota(self, response, cfg):
-        match = re.search(r'try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s', response.text, re.I)
-        delay = float(response.headers.get('retry-after', 0))
-        if match:
-            hours, minutes, seconds = match.groups()
-            delay = max(delay, int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds))
-        while delay > 0:
-            interval = min(delay, cfg.conversation['agent']['daily_wait_poll_seconds'])
-            log.step('LLM', 'daily quota wait', seconds=round(delay))
-            sleep(interval)
-            delay -= interval
 
     def close(self):
         self.inner.close()
@@ -205,13 +139,19 @@ class Runner:
 
     def _fake(self, messages, registry):
         for _ in range(get_settings().agent['max_steps']):
-            result = self.llm.chat(messages)
+            with log.span('LLM', 'scripted request', model='scripted'):
+                result = self.llm.chat(messages)
             if isinstance(result, str):
                 return result
+            outputs = []
             for call in result.get('tool_calls', []):
                 tool = registry.tools.get(call['name'])
                 output = tool.invoke(call.get('arguments', {})) if tool and call['name'] in registry.visible() else {'ok': False, 'code': 'NOT_VERIFIED'}
+                outputs.append((call['name'], output))
                 messages.append({'role': 'tool', 'content': json.dumps(output)})
+            display = registry.direct_display(outputs)
+            if display:
+                return display
             if not result.get('tool_calls'):
                 return result.get('text', '')
         return get_settings().conversation['safe']['tool_limit']
@@ -229,16 +169,29 @@ class Runner:
         else:
             # Native Gemini is available without LiteLLM; keys remain inside the SDK.
             llm = LLM(model=model, api_key=cfg.secrets.gemini_api_key.get_secret_value(), timeout=cfg.llm.timeout_seconds, temperature=cfg.models.temperature)
-            original_call = llm.call
+            gemini_call = llm.call
             def guarded_call(*args, **kwargs):
                 (self.quota or QuotaGuard()).reserve('llm')
                 with log.span('LLM', 'CrewAI native Gemini request', model=model):
-                    return original_call(*args, **kwargs)
+                    return gemini_call(*args, **kwargs)
             llm.call = guarded_call
         try:
             if repair:
                 with log.span('VERIFY', 'one repair call', model=model):
                     return llm.call(messages)
+            original_call = llm.call
+            def step_call(*args, **kwargs):
+                registry.display_start = len(registry.results)
+                result = original_call(*args, **kwargs)
+                # Decide from the entire batch so search plus display keeps its write-up.
+                registry.display_step = []
+                if isinstance(result, list):
+                    for call in result:
+                        function = call.get('function', call) if isinstance(call, dict) else call.function
+                        name = function.get('name') if isinstance(function, dict) else function.name
+                        registry.display_step.append(name)
+                return result
+            llm.call = step_call
             agent = Agent(role=cfg.conversation['agent']['role'], goal=cfg.conversation['agent']['goal'], backstory=messages[0]['content'], llm=llm, tools=registry.list(), allow_delegation=False, verbose=False, max_iter=cfg.agent['max_steps'], max_retry_limit=0)
             task = Task(description=messages[-1]['content'], expected_output=cfg.conversation['agent']['expected_output'], agent=agent)
             with log.span('AGENT', 'turn', model=model):
@@ -262,10 +215,12 @@ class Runner:
         reply = None
         if self.llm is not None:
             reply = self._fake(messages, registry)
+            log.step('LLM', 'model answered', model='scripted')
         else:
             for model in ([self.model] if self.model else [cfg.models.agent, *cfg.models.agent_fallbacks]):
                 try:
                     reply = self._native(model, messages, registry)
+                    log.step('LLM', 'model answered', model=model)
                     break
                 except Exception as exc:
                     log.step('AGENT', 'provider failed', model=model, error=type(exc).__name__)
@@ -275,7 +230,12 @@ class Runner:
         if reply is None:
             return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
         reply = canonical_citations(reply)
-        valid, errors = check(reply, registry.results)
+        displays = list(dict.fromkeys(result['display'] for _, result in registry.results if result.get('display')))
+        for display in displays:
+            if display not in reply:
+                reply += '\n' + display
+        with log.span('VERIFY', 'number check'):
+            valid, errors = check(reply, registry.results)
         log.step('VERIFY', 'number and citation check', passed=valid, errors=errors)
         if not valid:
             repair = cfg.prompts['repair'].replace('{{bad_numbers}}', json.dumps(errors)).replace('{{sources}}', json.dumps(registry.results, default=str))
@@ -291,10 +251,6 @@ class Runner:
             if not isinstance(reply, str) or not check(reply, registry.results)[0] or not reply:
                 reply = cfg.messages['answers']['unverified_number']
         reply = canonical_citations(reply)
-        displays = list(dict.fromkeys(result['display'] for _, result in registry.results if result.get('display')))
-        for display in displays:
-            if display not in reply:
-                reply += '\n' + display
         citations = [item for _, result in registry.results for item in result.get('data', {}).get('items', [])]
         log.step('AGENT', 'final response', chars=len(reply), calls=len(registry.results))
         return {'reply': mask_text(reply), 'citations': citations, 'usage': self.usage}

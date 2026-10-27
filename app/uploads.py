@@ -14,7 +14,7 @@ from app.ingest.pipeline import Pipeline
 from app.ingest.store import Store
 from app.ingest.validation import InvalidFile, validate_file
 from app.llm import QuotaExceeded
-from app.log import log
+from app.log import log, request_context
 
 
 class UploadService:
@@ -38,6 +38,7 @@ class UploadService:
         directory.mkdir(parents=True, exist_ok=True)
         file_hash = digest(content)
         path = directory / f"{file_hash}{Path(safe_name).suffix.lower()}"
+        log.upload_details(parser=path.suffix.lstrip('.'), ocr_pages=0, vlm_pages=0, embed_chunks=0, source='queued')
         previous = self.store.one(
             "documents", {"owner_key": owner_key, "file_hash": file_hash}
         )
@@ -78,6 +79,7 @@ class UploadService:
             "expires_at": utcnow() + timedelta(hours=cfg.uploads["expiry_hours"]),
             "processing_state": "queued",
             "attachment": attachment,
+            "request_id": request_context.get()["id"] if request_context.get() else None,
             "counts": {},
             "review_flags": [],
         }
@@ -107,6 +109,8 @@ class UploadService:
                 if result["processing_state"] == "partial"
                 else "Ready"
             )
+            log.upload_details(parser=document['mime'], ocr_pages=result.get('counts', {}).get('ocr_pages', 0),
+                               vlm_pages=result.get('counts', {}).get('vlm_pages', 0), embed_chunks=result.get('counts', {}).get('chunks', 0))
             document = self.store.one("documents", {"doc_id": document["doc_id"]})
             self._status(document, status, result.get("warnings", []))
             return document["attachment"]
@@ -171,24 +175,26 @@ class UploadService:
         document = self._owned(owner_key, attachment_id)
         return self._delete_document(document)
 
-    def _delete_document(self, document):
+    def _delete_document(self, document, counts=None):
+        counts = counts if counts is not None else {}
         doc_id, owner = document["doc_id"], document["owner_key"]
         if owner == "bank":
             raise ValueError("Bank documents are not customer uploads")
         for name in ("chunks", "sections", "rate_rows", "rate_tables", "ingest_jobs"):
-            self.store.delete(
+            removed = self.store.delete(
                 name,
                 {
                     "doc_id": doc_id,
                     **({"owner_key": owner} if name != "ingest_jobs" else {}),
                 },
             )
+            counts[name] = counts.get(name, 0) + removed
         path = Path(document["storage_path"]).resolve()
         if path.is_relative_to((ROOT / "data/uploads" / digest(owner)).resolve()):
             path.unlink(missing_ok=True)
         (ROOT / "data/ingest" / f"{doc_id}.json").unlink(missing_ok=True)
-        self.store.delete("documents", {"doc_id": doc_id, "owner_key": owner})
-        self.store.delete("image_cache", {"owner_key": owner})
+        for name, query in [('documents', {'doc_id': doc_id, 'owner_key': owner}), ('image_cache', {'owner_key': owner})]:
+            counts[name] = counts.get(name, 0) + self.store.delete(name, query)
         for cached in (ROOT / "data/test_cache").glob(f"vision_{digest(owner)}_*.json"):
             cached.unlink(missing_ok=True)
         self.store.patch(
@@ -212,7 +218,6 @@ class UploadService:
                 }
             },
         )
-        log.step("CLEANUP", "deleted upload", doc=doc_id)
         return True
 
     def cleanup(self):
@@ -220,18 +225,14 @@ class UploadService:
         expired = self.store.find(
             "documents", {"namespace": "user", "expires_at": {"$lte": now}}
         )
+        counts = {}
         for document in expired:
-            self._delete_document(document)
+            self._delete_document(document, counts)
         # TTL may delete document records first; dependent collections expire independently.
-        for name in (
-            "chunks",
-            "sections",
-            "rate_rows",
-            "rate_tables",
-            "image_cache",
-            "embed_cache",
-        ):
-            self.store.delete(name, {"expires_at": {"$lte": now}})
+        for name in ('chunks', 'sections', 'rate_rows', 'rate_tables', 'image_cache', 'embed_cache'):
+            counts[name] = counts.get(name, 0) + self.store.delete(name, {'expires_at': {'$lte': now}})
+        if any(counts.values()):
+            log.step('CLEANUP', 'expired rows deleted', **{name: count for name, count in counts.items() if count})
         from datetime import timedelta
 
         cutoff = (
@@ -300,9 +301,9 @@ class UploadWorker:
                 ):
                     if self.stop_event.is_set():
                         break
-                    self.service.process(
-                        document["owner_key"], document["attachment"]["id"]
-                    )
+                    with log.request('upload', document.get('request_id')):
+                        log.step('INGEST', 'job picked up', doc=document['doc_id'], stage=document['processing_state'])
+                        self.service.process(document['owner_key'], document['attachment']['id'])
             except Exception as exc:
                 log.step("INGEST", "worker error", error=type(exc).__name__)
             self.stop_event.wait(cfg["poll_seconds"])

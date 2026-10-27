@@ -1,3 +1,14 @@
+smalltalk:
+  greeting:
+    phrases: [hi, hello, hey, namaste, good morning, good afternoon, good evening]
+    reply: 'Hello! How can I help with Harbourline Bank?'
+  thanks:
+    phrases: [thanks, thank you, ok thanks]
+    reply: "You're welcome!"
+  goodbye:
+    phrases: [bye]
+    reply: 'Goodbye! Have a good day.'
+display_tools: [chequebook_set_slots, debit_card_set_slots, flow_summary, flow_status, flow_cancel, get_balance, get_statement, get_card_info, start_authentication, escalate_to_human]
 commands:
   stop: ['no, stop', 'stop', 'no stop']
   confirm:
@@ -114,7 +125,6 @@ tools:
   flow_summary: Prepare a summary to ask the customer to confirm. Never submits.
   flow_cancel: Cancel the open request only when the customer explicitly wants cancellation.
 agent:
-  daily_wait_poll_seconds: 30
   bakeoff_models: [groq/openai/gpt-oss-20b, groq/openai/gpt-oss-120b, groq/qwen/qwen3.8-27b]
   role: Harbourline Bank assistant
   goal: Use the visible tools to help the customer safely.
@@ -125,15 +135,6 @@ agent:
   endpoint: https://api.groq.com/openai/v1
   cache_version: 1
   max_output_tokens: 700
-  free_tpm: 8000
-  free_rpm: 30
-  token_safety_fraction: 0.9
-  schema_chars_per_token: 12
-  input_token_multiplier: 1.5
+  free_tpm: 8000  # Report metadata used by the evaluation scripts; never paces calls.
   history_token_budget: 1000
-  protocol_overhead_tokens: 100
-  backoff_seconds:
-  - 5
-  - 15
-  - 30
   reference_digits: 4

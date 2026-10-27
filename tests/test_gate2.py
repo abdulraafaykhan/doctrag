@@ -38,7 +38,7 @@ def call(name, **arguments):
 
 
 def test_A1_A3_A9_replay_and_masking(store):
-    llm = FakeLLM([call('get_balance'), '', call('get_statement', period='last_5'), '', call('get_card_info'), ''])
+    llm = FakeLLM([call('get_balance'), call('get_statement', period='last_5'), call('get_card_info')])
     chat = Chat(store, llm=llm)
     first = chat.turn('show my balance')
     assert 'mobile' in first['reply'] and 'account' in first['reply']
@@ -248,12 +248,12 @@ def test_I1_I2_fallback_state(store, verified, monkeypatch, rate_limited):
         calls.append(model)
         return fake.chat(messages)
     monkeypatch.setattr(runner, '_native', native)
-    result = Chat(store, runner=runner).turn('hi', session_id=verified['session_id'])
+    result = Chat(store, runner=runner).turn('help me', session_id=verified['session_id'])
     assert result['reply'] == 'Hello' and len(calls) == 2
     def fail(*args):
         raise TimeoutError()
     monkeypatch.setattr(runner, '_native', fail)
-    result = Chat(store, runner=runner).turn('hi', session_id=verified['session_id'])
+    result = Chat(store, runner=runner).turn('help me', session_id=verified['session_id'])
     assert result['reply'] == get_settings().messages['answers']['retry_later']
     assert result['state'] == 'VERIFIED'
 
@@ -338,7 +338,7 @@ def test_native_optional_schema_and_cache(tmp_path, monkeypatch):
         bodies.append(json.loads(request.content))
         return httpx.Response(200, json={'choices': [{'message': {'content': 'ok'}}], 'usage': {'total_tokens': 10}})
     monkeypatch.setattr(module, 'ROOT', tmp_path)
-    transport = module.LoggedTransport(quota, usage, cache=True, pacing=False, schemas={'search_bank_knowledge': Search.model_json_schema()})
+    transport = module.LoggedTransport(quota, usage, cache=True, schemas={'search_bank_knowledge': Search.model_json_schema()})
     transport.inner = httpx.MockTransport(respond)
     body = {'model': 'fake', 'messages': [{'role': 'user', 'content': 'NEFT charges'}], 'tools': [{'function': {'name': 'search_bank_knowledge', 'parameters': {'required': ['query', 'doc_type']}}}]}
     for _ in range(2):
@@ -360,7 +360,7 @@ def test_search_result_masking_preserves_json(store, verified):
 
 
 def test_actual_held_queue_and_resend_limit(store):
-    llm = FakeLLM([call('get_balance'), '', call('get_statement', period='last_5'), '', call('get_card_info'), ''])
+    llm = FakeLLM([call('get_balance'), call('get_statement', period='last_5'), call('get_card_info')])
     chat = Chat(store, llm=llm)
     first = chat.turn('my balance')
     sid = first['session_id']
@@ -404,7 +404,7 @@ def test_history_is_bounded_before_model(store, verified):
     verified['history'] = [{'role': 'assistant', 'content': 'bank information ' * 1000}]
     Sessions(store).save(verified)
     llm = FakeLLM(['Hello'])
-    Chat(store, llm=llm).turn('hi', session_id=verified['session_id'])
+    Chat(store, llm=llm).turn('help me', session_id=verified['session_id'])
     assert 'bank information' not in llm.calls[0]['messages'][1]['content']
 
 
@@ -465,3 +465,59 @@ def test_J_number_units_citations_and_repair(store, verified):
     llm = FakeLLM(['Rate 99.9%', 'Rate 99.9%'])
     reply = Chat(store, llm=llm).turn('rate?', session_id=verified['session_id'])
     assert reply['reply'] == get_settings().messages['answers']['unverified_number']
+
+
+@pytest.mark.parametrize('text,group', [('Hi!', 'greeting'), ('OK, thanks.', 'thanks'), ('Bye!', 'goodbye')])
+def test_smalltalk_no_llm(store, text, group):
+    llm = FakeLLM()
+    result = Chat(store, llm=llm).turn(text)
+    assert result['reply'] == get_settings().conversation['smalltalk'][group]['reply']
+    assert not llm.calls and not result['tools_called']
+    assert len(store.one('sessions', {'session_id': result['session_id']})['history']) == 2
+
+
+def test_partial_chequebook_one_call(store, verified):
+    llm = FakeLLM([call('chequebook_set_slots', pages=40)])
+    result = Chat(store, llm=llm).turn('I want a cheque book with 40 pages', session_id=verified['session_id'])
+    assert len(llm.calls) == 1
+    assert result['flow']['slots']['pages'] == 40
+    assert 'delivery' in result['reply'].lower()
+
+
+def test_mixed_display_and_search_keeps_writeup(store, verified):
+    llm = FakeLLM([{'tool_calls': [{'name': 'chequebook_set_slots', 'arguments': {'pages': 40}},
+                                {'name': 'search_bank_knowledge', 'arguments': {'query': 'NEFT charges'}}]},
+                   'Bank information is unavailable.'])
+    result = Chat(store, llm=llm, embeddings=FakeLLM()).turn('hi, request a cheque book and explain NEFT charges', session_id=verified['session_id'])
+    assert len(llm.calls) == 2
+    assert result['tools_called'] == ['chequebook_set_slots', 'search_bank_knowledge']
+    assert 'Bank information' in result['reply']
+
+
+@pytest.mark.parametrize('mixed,expected_calls', [(False, 1), (True, 2)])
+def test_native_crewai_display_batch(store, verified, monkeypatch, mixed, expected_calls):
+    import httpx
+    from app.agent import Runner
+    from types import SimpleNamespace
+    requests = []
+    def respond(request):
+        requests.append(json.loads(request.content))
+        message = {'role': 'assistant', 'content': 'Bank information is unavailable.'}
+        if len(requests) == 1:
+            names = ['chequebook_set_slots'] + (['search_bank_knowledge'] if mixed else [])
+            message = {'role': 'assistant', 'content': None, 'tool_calls': [
+                {'id': 'call_' + str(i), 'type': 'function', 'function': {'name': name,
+                 'arguments': json.dumps({'pages': 40} if i == 0 else {'query': 'NEFT charges'})}}
+                for i, name in enumerate(names)]}
+        return httpx.Response(200, json={'id': 'completion', 'object': 'chat.completion', 'created': 1,
+            'model': 'fixture', 'choices': [{'index': 0, 'message': message,
+            'finish_reason': 'tool_calls' if message.get('tool_calls') else 'stop'}],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 10, 'total_tokens': 20}})
+    monkeypatch.setattr(httpx, 'HTTPTransport', lambda: httpx.MockTransport(respond))
+    runner = Runner(quota=SimpleNamespace(reserve=lambda kind: None))
+    result = Chat(store, runner=runner, embeddings=FakeLLM()).turn(
+        'Request a cheque book with 40 pages' + (' and explain NEFT charges' if mixed else ''),
+        session_id=verified['session_id'])
+    assert len(requests) == expected_calls
+    assert 'chequebook_set_slots' in result['tools_called']
+    assert 'delivery' in result['reply'].lower()

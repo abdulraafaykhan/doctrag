@@ -105,6 +105,7 @@ class Debit(Args):
 class BoundTool(BaseTool):
     _callback: Callable = PrivateAttr()
     _registry: Any = PrivateAttr()
+    _structured: Any = PrivateAttr(default=None)
 
     def __init__(self, name, schema, callback, registry):
         super().__init__(name=name, description=get_settings().conversation['tools'][name], args_schema=schema)
@@ -133,6 +134,7 @@ class BoundTool(BaseTool):
         if result['code'] == 'INVALID_ARGUMENT':
             registry.invalid[self.name] = registry.invalid.get(self.name, 0) + 1
         if self.name.startswith('search_'):
+            log.path('rag', reason='search tool selected')
             for item in result.get('data', {}).get('items', []):
                 registry.source_count += 1
                 item['n'] = registry.source_count
@@ -142,8 +144,20 @@ class BoundTool(BaseTool):
         # Address PINs are valid stored delivery data, but never leave the code boundary.
         return mask_payload(result)
 
+    def to_structured_tool(self):
+        self._structured = super().to_structured_tool()
+        return self._structured
+
     def _run(self, **kwargs):
-        return json.dumps(self.invoke(kwargs), ensure_ascii=False, default=str)
+        result = self.invoke(kwargs)
+        step = self._registry.display_step
+        # CrewAI stops only on the last successful display in an all-display batch.
+        outputs = self._registry.results[self._registry.display_start:] if step else []
+        display = self._registry.direct_display(outputs) if len(outputs) == len(step) and [name for name, _ in outputs] == step else None
+        self.result_as_answer = bool(display)
+        if self._structured is not None:
+            self._structured.result_as_answer = bool(display)
+        return display or json.dumps(result, ensure_ascii=False, default=str)
 
 
 class Registry:
@@ -152,7 +166,15 @@ class Registry:
         self.flows, self.sessions = Flows(store), Sessions(store)
         self.calls, self.results = 0, []
         self.invalid, self.source_count = {}, 0
+        self.display_step, self.display_start = [], 0
         self.tools = self._build()
+
+    def direct_display(self, outputs):
+        allowed = get_settings().conversation['display_tools']
+        if outputs and all(name in allowed and result.get('display') for name, result in outputs):
+            log.path('flow-display', reason='all tools returned exact displays')
+            return '\n'.join(result['display'] for _, result in outputs)
+        return None
 
     def visible(self):
         public = ['search_bank_knowledge', 'search_my_documents', 'list_my_documents', 'delete_my_documents', 'lookup_rate', 'emi_calculator', 'start_authentication', 'escalate_to_human']

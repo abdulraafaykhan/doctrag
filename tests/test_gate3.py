@@ -42,7 +42,7 @@ def test_session_chat_restore_and_second_tab(services):
     client, store, uploads, sid, llm = services
     assert send(client, sid, 'hi', request_id='one').status_code == 200
     cached = send(client, sid, 'hi', request_id='one')
-    assert cached.status_code == 200 and len(llm.calls) == 1
+    assert cached.status_code == 200 and not llm.calls
     state = client.get('/api/session').json()
     assert state['history'][0]['message'] == 'hi'
     assert state['history'][0]['response']['reply_markdown']
@@ -183,7 +183,7 @@ def test_concurrent_retry_cannot_execute_the_same_turn_twice(services):
         return original(messages, **kwargs)
     llm.chat = blocked
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(send, client, sid, 'hi', request_id='concurrent')
+        first = pool.submit(send, client, sid, 'help me', request_id='concurrent')
         assert entered.wait(10)
         second = send(client, sid, 'hi', request_id='concurrent')
         release.set()
@@ -199,3 +199,74 @@ def test_numeric_units_match_source_words_without_crossing_units():
     assert check('Debt cap 50%; income ₹25,000.', evidence)[0]
     assert not check('Debt cap ₹50.', evidence)[0]
     assert not check('Income 25000%.', evidence)[0]
+
+
+def test_request_summaries_and_image_ingest(services, monkeypatch):
+    import io
+    from PIL import Image, ImageDraw
+    from app.ingest.embeddings import Embeddings
+    from app.ingest.images import ImageCascade
+    from app.ingest.pipeline import Pipeline
+    from app.log import log, request_context
+    from app.session import Sessions
+    client, store, uploads, sid, llm = services
+    summaries = []
+    original = log.step
+    def capture(area, action, **fields):
+        state = request_context.get()
+        if state is not None and action.startswith(('chat  total=', 'upload  total=')):
+            summaries.append(state['id'] + '  ' + action)
+        original(area, action, **fields)
+    monkeypatch.setattr(log, 'step', capture)
+    assert send(client, sid, 'hi').status_code == 200
+    session = store.one('sessions', {'session_id': sid})
+    session['auth'].update(state='VERIFIED', user_id='usr_001', account_id='acc_001')
+    Sessions(store).save(session)
+    llm.replies = iter([{'tool_calls': [{'name': 'chequebook_set_slots', 'arguments': {'pages': 40}}]}])
+    assert send(client, sid, 'Request a cheque book with 40 pages').status_code == 200
+    client.app.state.api.chat.embeddings = FakeLLM()
+    store.put('documents', {'doc_id': 'smoke-bank'}, {'doc_id': 'smoke-bank', 'title': 'Fictional bank FAQ'})
+    store.put('chunks', {'chunk_id': 'smoke-neft'}, {
+        'chunk_id': 'smoke-neft', 'section_id': 'smoke-neft', 'doc_id': 'smoke-bank',
+        'namespace': 'bank', 'owner_key': 'bank', 'lifecycle': 'active',
+        'text': 'NEFT transfers are available.', 'page': 1, 'version': '1',
+        'effective_date': '2026-10-01', 'confidence': 1.0})
+    llm.replies = iter([{'tool_calls': [{'name': 'search_bank_knowledge', 'arguments': {'query': 'NEFT charges'}}]},
+                        'NEFT transfers are available. [1]'])
+    assert send(client, sid, 'What are NEFT charges?').status_code == 200
+    # Exercise real upload parsing/chunking/storage, with deterministic OCR and embeddings.
+    image = Image.new('RGB', (800, 400), 'white')
+    ImageDraw.Draw(image).text((20, 20), 'A fictional bank service note for customers.', fill='black')
+    blob = io.BytesIO()
+    image.save(blob, format='PNG')
+    text = 'A fictional bank service note for customers. ' * 40
+    def ocr(image):
+        with log.span('OCR', 'fixture OCR'):
+            return [[[[20, 20], [780, 20], [780, 380], [20, 380]], text, 0.99]]
+    uploads.pipeline = Pipeline(store, images=ImageCascade(store, ocr=ocr),
+                                embeddings=Embeddings(store, FakeLLM(), pace=False))
+    card = upload(client, sid, 'summary.png', blob.getvalue()).json()
+    document = store.one('documents', {'attachment.id': card['id']})
+    with log.request('upload', document['request_id']):
+        assert uploads.process(sid, card['id'])['status'] == 'Ready'
+    assert all('r-' in line for line in summaries)
+    assert ['path=greeting', 'path=flow-display', 'path=rag'] == [
+        next(part for part in line.split() if part.startswith('path=')) for line in summaries[:3]]
+    assert 'ocr_pages=1' in summaries[-1] and 'source=ocr' in summaries[-1]
+    (ROOT / 'data' / 'request_smoke_summaries.txt').write_text('\n'.join([*summaries[:3], summaries[-1]]), encoding='utf-8')
+
+
+def test_db_debug_aggregates_and_context_resets(services, monkeypatch):
+    from app.log import log, request_context
+    from app.ingest.store import Store
+    from types import SimpleNamespace
+    lines = []
+    monkeypatch.setattr(log.console, 'print', lambda value: lines.append(str(value)))
+    monkeypatch.setattr('app.ingest.store.collection', lambda name: SimpleNamespace(find_one=lambda query, **kwargs: None))
+    with log.request('chat') as state:
+        Store().one('sessions', {})
+        assert state['spans'][0][0] == 'DB'
+        request_id = state['id']
+    assert request_context.get() is None
+    assert not any('find one' in line for line in lines)
+    assert any(request_id in line and '1 ops' in line for line in lines)

@@ -55,7 +55,7 @@ Areas and what must be logged (not exhaustive, but nothing important may be sile
 | INGEST | job stage changes, chunks done/total, pause/resume on quota |
 | RAG | filters, candidates from vector and keyword, merge result, rerank on/off, top scores, `no_good_match` |
 | VERIFY | number check pass/fail, repair attempt, safe message used |
-| DB | slow queries (> 300 ms) and write operations on important collections |
+| DB | individual operations at DEBUG; count and total time in the request summary |
 | UPLOAD | received, validated, accepted/rejected with reason, limits applied |
 | CLEANUP | expired sessions/uploads removed |
 
@@ -73,3 +73,5 @@ Example output:
 10:42:14  LLM      groq gpt-oss-120b | purpose=answer in=2840 out=190 ms=1310
 10:42:14  VERIFY   numbers ok | 3 checked
 ```
+
+Each chat/upload POST has a context-local `r-xxxx` ID on every line and one end-of-request summary with path, provider calls, tools, DB count/time, pre-pass and verification time. Upload acceptance reports queued counters; the background INGEST completion summary reuses the request ID and reports parser, OCR/VLM pages, embedding chunks, selected image source and stage times. DB operations are DEBUG (aggregated even at INFO); `LOG_LEVEL=DEBUG` enables them. Idle polling and cleanup are silent; session heartbeat is one DEBUG line. Cleanup reports only nonzero deleted collection counts.

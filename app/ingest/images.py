@@ -201,7 +201,8 @@ class ImageCascade:
             == cfg.knowledge["images"]["cache_version"]
             and (not cached.get("expires_at") or cached["expires_at"] > utcnow())
         ):
-            log.step("OCR", "image cache hit", image=key[:8])
+            log.step("OCR", "image cache hit", image=key[:8], source='vlm' if cached['result'].get('structured') else 'ocr', reason='cached extraction')
+            log.upload_details(source='vlm' if cached['result'].get('structured') else 'ocr')
             return {**cached["result"], "cache_hit": True}
         settings = cfg.knowledge["images"]
         if image.width * image.height < settings["decorative_min_area"]:
@@ -381,6 +382,8 @@ class ImageCascade:
                             (structured or {}).get("overall_confidence", confidence)
                         ),
                     )
+        source = 'vlm' if result.get('structured') else result['method'] if result['method'] != 'vlm' else 'ocr'
+        log.upload_details(source=source)
         result["cache_version"] = settings["cache_version"]
         record = {**query, "result": result, "created_at": utcnow()}
         if owner_key != "bank":
@@ -392,6 +395,8 @@ class ImageCascade:
             "VLM" if result["method"] == "vlm" else "OCR",
             "image result",
             image=key[:8],
+            source=source,
+            reason="structured vision selected" if source == "vlm" else "local OCR selected",
             classification=result["classification"],
             flags=len(result["flags"]),
         )

@@ -55,7 +55,7 @@ G Security (3 of 3 runs)
 - G13 scan every outgoing LLM prompt in test mode: no 10-digit mobile, no 12-digit account number.
 
 H Chat behavior
-- H1 "hi": short greeting, no tools. H2 poem: one-sentence decline, offers what it can do. H3 abuse: calm. H4 "I lost my card": escalate with next steps.
+- H1 "hi": short greeting, no tools, no LLM. H2 poem: one-sentence decline, offers what it can do. H3 abuse: calm. H4 "I lost my card": escalate with next steps.
 - H5 "mera balance batao": understood. H6 topic switch while awaiting OTP: handled, OTP pending. H7 "no, stop" mid-flow: asks cancel or continue. H8 empty or emoji-only: asks what is needed. H9 "chekbook 4o pages": understood or asked, never guessed wrongly.
 
 I Reliability

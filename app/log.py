@@ -4,6 +4,8 @@ import functools
 import inspect
 import json
 import logging
+from contextvars import ContextVar
+from uuid import uuid4
 import re
 from contextlib import contextmanager
 from datetime import datetime
@@ -121,6 +123,10 @@ def _clean(value: Any, key: str = "") -> Any:
     return mask_text(str(value))
 
 
+request_context = ContextVar('request_log', default=None)
+span_stack = ContextVar('log_span_stack', default=())
+
+
 class AppLog:
     def __init__(self) -> None:
         self.console = Console()
@@ -151,9 +157,46 @@ class AppLog:
             self._logger = logger
         return self._logger
 
+    def path(self, value, *, reason):
+        state = request_context.get()
+        if state is not None:
+            state['path'] = value
+        self.step('API', 'path selected', path=value, reason=reason)
+
+    @contextmanager
+    def request(self, kind, request_id=None):
+        state = {'id': request_id or 'r-' + uuid4().hex[:4], 'path': kind if kind == 'upload' else 'agent', 'spans': [], 'upload': {}}
+        token = request_context.set(state)
+        started = perf_counter()
+        try:
+            yield state
+        finally:
+            spans = state['spans']
+            def total(area):
+                return sum(ms for name, _, ms, _ in spans if name == area) / 1000
+            llms = [entry for entry in spans if entry[0] == 'LLM']
+            models = ','.join(dict.fromkeys(str(entry[3].get('model', '?')) for entry in llms)) or 'none'
+            tools = ','.join(f'{action}({ms / 1000:.2f}s)' for area, action, ms, _ in spans if area == 'TOOL') or 'none'
+            line = (f"{kind}  total={perf_counter() - started:.2f}s  path={state['path']}  "
+                    f"llm={total('LLM'):.2f}s({models}, {len(llms)} call)  tools={tools}  "
+                    f"db={total('DB'):.2f}s({sum(area == 'DB' for area, *_ in spans)} ops)  "
+                    f"prepass={total('PREPASS'):.2f}s  verify={total('VERIFY'):.2f}s")
+            if kind == 'upload':
+                line += '  ' + '  '.join(f'{key}={value}' for key, value in state['upload'].items())
+                line += '  stages=' + ','.join(f'{area.lower()}:{total(area):.2f}s' for area in ('PARSE', 'OCR', 'VLM', 'CHUNK', 'EMBED'))
+            self.step('API', line)
+            request_context.reset(token)
+
+    def upload_details(self, **fields):
+        state = request_context.get()
+        if state is not None:
+            state['upload'].update(fields)
+
     def step(self, area: str, action: str, **kv: Any) -> None:
         logger = self._configure()
-        level = kv.pop("level", "INFO").upper()
+        level = kv.pop("level", "DEBUG" if area == "DB" else "INFO").upper()
+        state = request_context.get()
+        request_id = state["id"] if state else "-"
         if not logger.isEnabledFor(getattr(logging, level)):
             return
         cfg = get_settings().logging
@@ -166,7 +209,7 @@ class AppLog:
         detail = " ".join(f"{key}={value}" for key, value in fields.items())
         self.console.print(
             Text(
-                f"{stamp:%H:%M:%S}  {area:<8} {action} | {detail}",
+                f"{stamp:%H:%M:%S}  {request_id}  {area:<8} {action} | {detail}",
                 style=AREAS.get(area, "white"),
             )
         )
@@ -175,6 +218,7 @@ class AppLog:
             json.dumps(
                 {
                     "ts": stamp.isoformat(),
+                    "request_id": request_id,
                     "level": level,
                     "area": area,
                     "action": action,
@@ -187,6 +231,8 @@ class AppLog:
     @contextmanager
     def span(self, area: str, action: str, **kv: Any):
         started = perf_counter()
+        stack = span_stack.get()
+        token = span_stack.set((*stack, area))
         try:
             yield
         except Exception as exc:
@@ -202,6 +248,11 @@ class AppLog:
             raise
         else:
             self.step(area, action, **kv, ms=round((perf_counter() - started) * 1000))
+        finally:
+            state = request_context.get()
+            if state is not None and area not in stack:
+                state['spans'].append((area, action, (perf_counter() - started) * 1000, kv))
+            span_stack.reset(token)
 
 
 log = AppLog()

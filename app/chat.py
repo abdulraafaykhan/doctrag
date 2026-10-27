@@ -21,6 +21,7 @@ class Chat:
         self.runner, self.embeddings = runner or Runner(llm), embeddings
 
     def _agent(self, session, text):
+        log.path('agent', reason='requires tool selection or grounded answer')
         registry = Registry(session, self.store, embeddings=self.embeddings)
         outcome = self.runner.run(session, text, registry)
         # start_authentication is the model's signal to hold the original masked request.
@@ -65,10 +66,18 @@ class Chat:
         cfg, auth = get_settings(), session['auth']
         if len(message) > cfg.agent['max_message_chars']:
             return {'reply': cfg.conversation['safe']['too_long'], 'citations': [], 'tools_called': []}
-        parsed = extract(message)
+        with log.span('PREPASS', 'extract and mask'):
+            parsed = extract(message)
         if not re.search(r'\w', message):
             return {'reply': cfg.conversation['safe']['empty'], 'citations': [], 'tools_called': []}
         log.step('PREPASS', 'masked input', message=parsed.text, hits=[name for name in ('mobile', 'account', 'code', 'postal_pin') if getattr(parsed, name)])
+        normalized = ' '.join(re.sub(r'[^\w\s]|_', '', message.lower()).split())
+        for group, entry in cfg.conversation['smalltalk'].items():
+            if normalized in entry['phrases']:
+                log.path('greeting', reason='exact ' + group)
+                result = {'reply': entry['reply'], 'citations': [], 'tools_called': []}
+                self._history(session, parsed, result)
+                return result
         if '[secret]' in parsed.text and auth['state'] != 'AWAITING_OTP' and not session.get('active_flow') and not any(word in parsed.command for word in cfg.conversation['personal']):
             return {'reply': cfg.conversation['safe']['secret_only'], 'citations': [], 'tools_called': []}
         if any(word in parsed.command for word in cfg.conversation['safe']['forbidden_patterns']):
@@ -144,6 +153,7 @@ class Chat:
             outputs = [self._agent(session, held['text']) for held in replay]
             result = {'reply': '\n'.join(output['reply'] for output in outputs), 'citations': [citation for output in outputs for citation in output.get('citations', [])], 'tools_called': [name for output in outputs for name in output.get('tools_called', [])]}
         elif fixed:
+            log.path('fast-otp' if auth['state'] != 'VERIFIED' or parsed.code else 'fast-confirm', reason=fixed['code'])
             result = {'reply': fixed['display'], 'citations': [], 'tools_called': []}
             if personal and any(word in parsed.command for word in cfg.conversation['mixed_public_signals']) and auth['state'] != 'VERIFIED':
                 public = self._agent(session, parsed.text)
@@ -155,9 +165,13 @@ class Chat:
                 suffix = cfg.messages['flow']['confirm_unclear'] if session['active_flow']['status'] == 'AWAITING_CONFIRM' else status['display']
                 if suffix not in result['reply']:
                     result['reply'] += '\n' + suffix
+        self._history(session, parsed, result)
+        log.step('API', 'chat response', auth=session['auth']['state'], tools=result.get('tools_called', []))
+        return result
+
+    def _history(self, session, parsed, result):
+        cfg = get_settings()
         # OTP/PIN payloads never become history, even after a failed verification attempt.
         if not parsed.code and '[secret]' not in parsed.text:
             session['history'].extend([{'role': 'user', 'content': parsed.text}, {'role': 'assistant', 'content': mask_text(result['reply'])}])
             session['history'] = session['history'][-cfg.session['history_turns'] * 2:]
-        log.step('API', 'chat response', auth=session['auth']['state'], tools=result.get('tools_called', []))
-        return result
