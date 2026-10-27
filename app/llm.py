@@ -380,6 +380,7 @@ class LLMClient:
             "warning": self.settings.messages["upload"]["vision_unavailable"],
             "structured": None,
             "status": "unreadable",
+            "needs_retry": True,
         }
 
     def _vision(
@@ -472,7 +473,7 @@ class FakeLLM:
         self.replies = iter(replies or [])
         self.calls: list[dict] = []
 
-    def chat(self, messages, purpose="answer") -> str:
+    def chat(self, messages, purpose="answer") -> str | dict:
         self.calls.append(
             {
                 "purpose": purpose,
@@ -481,7 +482,10 @@ class FakeLLM:
                 ],
             }
         )
-        return next(self.replies, get_settings().messages["answers"]["retry_later"])
+        result = next(self.replies, get_settings().messages["answers"]["retry_later"])
+        if isinstance(result, Exception):
+            raise result
+        return result
 
     def vision(
         self,

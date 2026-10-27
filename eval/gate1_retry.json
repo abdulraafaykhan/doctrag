@@ -1,0 +1,116 @@
+[
+  {
+    "image": "rates_17.png",
+    "state": "done",
+    "readable": true,
+    "correct": 12,
+    "total": 12,
+    "flags": [],
+    "fixture_lookup": [
+      {
+        "tenure": "12",
+        "code": "OK",
+        "rate": {
+          "rate_percent": "6.67"
+        },
+        "expected": "6.67%"
+      },
+      {
+        "tenure": "24",
+        "code": "OK",
+        "rate": {
+          "rate_percent": "6.77"
+        },
+        "expected": "6.77%"
+      },
+      {
+        "tenure": "36",
+        "code": "OK",
+        "rate": {
+          "rate_percent": "6.87"
+        },
+        "expected": "6.87%"
+      }
+    ],
+    "bank_lookup": {
+      "ok": true,
+      "code": "OK",
+      "data": {
+        "rate": {
+          "rate_percent": "7.10"
+        },
+        "effective_date": "2026-10-01",
+        "source": {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "page": 1
+        },
+        "row": {
+          "product": "fixed_deposit",
+          "tenure_months": "12",
+          "segment": "general",
+          "rate_percent": "7.10"
+        }
+      },
+      "hint": "",
+      "display": ""
+    }
+  },
+  {
+    "image": "rates_19.png",
+    "state": "done",
+    "readable": true,
+    "correct": 12,
+    "total": 12,
+    "flags": [
+      "unreadable_cell:2:0",
+      "unreadable_cell:2:1",
+      "unreadable_cell:2:2",
+      "unreadable_cell:2:3",
+      "unreadable_cell:3:0",
+      "unreadable_cell:3:1",
+      "unreadable_cell:3:2",
+      "unreadable_cell:3:3",
+      "truncated"
+    ],
+    "fixture_lookup": [
+      {
+        "tenure": "12",
+        "code": "OK",
+        "rate": {
+          "rate_percent": "6.69"
+        },
+        "expected": "6.69%"
+      },
+      {
+        "tenure": "24",
+        "code": "OK",
+        "rate": {
+          "rate_percent": "6.79"
+        },
+        "expected": "6.79%"
+      }
+    ],
+    "bank_lookup": {
+      "ok": true,
+      "code": "OK",
+      "data": {
+        "rate": {
+          "rate_percent": "7.10"
+        },
+        "effective_date": "2026-10-01",
+        "source": {
+          "doc_id": "doc_6f616d0c94a5d9f0ce310aae",
+          "page": 1
+        },
+        "row": {
+          "product": "fixed_deposit",
+          "tenure_months": "12",
+          "segment": "general",
+          "rate_percent": "7.10"
+        }
+      },
+      "hint": "",
+      "display": ""
+    }
+  }
+]

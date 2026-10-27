@@ -22,7 +22,7 @@ steps:
     question: "Should we deliver it to your address on file, or a different address?"
     type: address
     options:
-      - {value: on_file, label: "Address on file", synonyms: [yes, same, "on file", home]}
+      - {value: on_file, label: "Address on file", synonyms: ["yes", same, "on file", home]}
       - {value: new, label: "Different address", synonyms: [new, different, other]}
     new_address_fields:
       line1: {min: 5, max: 120}
@@ -38,4 +38,5 @@ summary_template: |
   - Delivery: {delivery_label}
   - Address: {address_text}
 confirm_buttons: [Confirm, Change, Cancel]
+change_buttons: [Pages, Delivery, Address]
 success_template: "Your cheque book request is submitted. Reference: {ref_no}. Expected by {expected_by}."

@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "tests_passed": 97,
+  "tests_skipped": 1,
+  "command": ".venv\\Scripts\\python.exe -m pytest -q",
+  "recorded_at": "2026-10-27T05:52:31.984611+00:00",
+  "groups": [
+    "A",
+    "B",
+    "C",
+    "G",
+    "I",
+    "J"
+  ],
+  "live_calls": 0
+}

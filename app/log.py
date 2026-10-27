@@ -93,6 +93,20 @@ def mask_text(value: str) -> str:
     return _NUMBER.sub(replace, value)
 
 
+def mask_payload(value: Any, key: str = "") -> Any:
+    """Mask leaves before serialization so numeric redaction cannot corrupt JSON."""
+    if _SENSITIVE.search(key):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {str(k): mask_payload(v, str(k)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [mask_payload(item, key) for item in value]
+    if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+        masked = mask_text(str(value))
+        return value if masked == str(value) else masked
+    return value
+
+
 def _clean(value: Any, key: str = "") -> Any:
     if _SENSITIVE.search(key):
         return "[REDACTED]"

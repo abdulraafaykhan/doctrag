@@ -93,6 +93,8 @@ class Settings(BaseModel):
     money: dict[str, Any]
     seed: dict[str, Any]
     knowledge: dict[str, Any]
+    conversation: dict[str, Any]
+    flows: dict[str, Any]
     messages: dict[str, Any]
     products: dict[str, Any]
     prompts: dict[str, Any]
@@ -136,6 +138,8 @@ def load_settings(root: Path = ROOT, secrets: Secrets | None = None) -> Settings
             messages=_yaml(root / "config/messages.yaml"),
             products=_yaml(root / "config/products.yaml"),
             knowledge=_yaml(root / "config/knowledge.yaml"),
+            conversation=_yaml(root / "config/conversation.yaml"),
+            flows={path.stem: _yaml(path) for path in sorted((root / "config/flows").glob("*.yaml"))},
         )
         if credentials.log_level:
             settings.logging.level = credentials.log_level

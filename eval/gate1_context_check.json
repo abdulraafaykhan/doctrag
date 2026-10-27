@@ -1,0 +1,12 @@
+{
+  "context_token_budget": 1200,
+  "hits": 29,
+  "total": 30,
+  "embedding_requests": 0,
+  "failures": [
+    {
+      "query": "How many salary slips and bank statements are needed for home loans?",
+      "hit": false
+    }
+  ]
+}

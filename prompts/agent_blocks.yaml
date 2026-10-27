@@ -1,5 +1,6 @@
 # Variants injected into {{auth_block}}, {{flow_block}}, {{docs_block}} by code.
 auth_block:
+  awaiting: 'Verification is already awaiting a code. Public bank questions and the customer own documents can be answered now without restarting login. For searches, doc_type is only faq, policy, rate_card or offer; fees_and_charges belongs in product, never doc_type. Omit filters that are uncertain.'
   anonymous: "The customer is NOT logged in. Account actions need login: call start_authentication. Never guess account data."
   verified: "The customer is logged in as {first_name}."
 flow_block:

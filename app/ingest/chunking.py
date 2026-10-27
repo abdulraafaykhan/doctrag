@@ -182,7 +182,12 @@ def rate_records(element, document):
         return [], []
     columns = element.content["columns"]
     keys = [re.sub(r"\W+", "_", column.lower()).strip("_") for column in columns]
+    row_reviews = [element.needs_review] * len(element.content["rows"])
+    if element.needs_review and element.flags and all(flag == "truncated" or flag.startswith("unreadable_cell:") for flag in element.flags):
+        # Independently OCR-validated complete rows stay usable when only cut-off rows are null.
+        row_reviews = [any(value is None for value in row) for row in element.content["rows"]]
     if "general_rate" in keys and "senior_rate" in keys:
+        row_reviews = [review for review in row_reviews for _ in range(2)]
         expanded = []
         for values in element.content["rows"]:
             raw = dict(zip(keys, values, strict=False))
@@ -264,7 +269,7 @@ def rate_records(element, document):
                 "row_text": " | ".join(f"{k}: {v}" for k, v in raw.items()),
                 "source": {"doc_id": document["doc_id"], "page": element.page},
                 "confidence": element.confidence,
-                "needs_review": element.needs_review
+                "needs_review": row_reviews[index]
                 or any(value is None for value in values),
             }
         )

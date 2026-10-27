@@ -47,3 +47,19 @@ chunks and queries, caches provider responses in `data/test_cache/`, and writes
 Quota counts use the Pacific day and count each embedding text conservatively.
 Ingest vision prefers Gemini with a 90-second timeout; online vision prefers
 Groq with a 25-second timeout. No input is trusted as an instruction.
+
+Phase 3 conversation engine and Gate 2:
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe scripts\run_gate2.py
+.venv\Scripts\python.exe scripts\run_gate2.py --release --model groq/qwen/qwen3.8-27b
+```
+
+`Chat.turn()` owns verification, held-message replay, leased sessions and explicit
+confirmation. Session-bound CrewAI tools expose only the actions permitted in the
+current state. The default suite uses FakeLLM; the explicit live runner uses Groq
+only for B/G/H, caches requests and complete cases, and paces against the published
+free-tier limits plus measured usage. No chat API routes are added before Phase 4.
+`scripts/retry_gate1_images.py` retries only the two original provider failures;
+successful cached image results and unchanged bank documents are reused.

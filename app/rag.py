@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.ingest.embeddings import Embeddings
 from app.ingest.store import Store
 from app.log import log
+from app.llm import QuotaExceeded
 
 
 class SearchArgs(BaseModel):
@@ -99,7 +100,11 @@ def search_knowledge(
             cfg.knowledge["messages"]["no_documents"],
         )
     embeddings = embeddings or Embeddings(store)
-    vector = embeddings.embed([query], query=True)[0]
+    try:
+        vector = embeddings.embed([query], query=True)[0]
+    except QuotaExceeded:
+        vector = None
+        log.step("RAG", "embedding quota exhausted; keyword-only retrieval")
     vector_filters = {key: value for key, value in filters.items() if key != "doc_id"}
     vector_rows = store.aggregate(
         "chunks",
@@ -117,7 +122,7 @@ def search_knowledge(
             {"$match": filters},
             {"$set": {"vector_score": {"$meta": "vectorSearchScore"}}},
         ],
-    )
+    ) if vector is not None else []
     keyword_rows = store.aggregate(
         "chunks",
         [

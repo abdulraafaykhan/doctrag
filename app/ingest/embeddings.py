@@ -10,7 +10,7 @@ from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_expo
 
 from app.config import ROOT, get_settings
 from app.ingest.models import digest, utcnow
-from app.llm import LLMClient, _retryable
+from app.llm import FakeLLM, LLMClient, _retryable
 from app.log import log, mask_text
 
 _pace_lock = Lock()
@@ -29,6 +29,8 @@ class Embeddings:
             safe = mask_text(text)
             # Query and document task types have separate cache keys.
             key = f"{cfg.models.embed}|{cfg.models.embed_dims}|{'query' if query else 'document'}|{digest(safe)}"
+            if isinstance(self.llm, FakeLLM):
+                key = "fake|" + key
             cached = self.store.one("embed_cache", {"key": key})
             disk = ROOT / "data/test_cache" / f"embedding_{digest(key)}.json"
             if cached and cached.get("expires_at", utcnow()) > utcnow():

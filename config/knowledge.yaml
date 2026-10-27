@@ -10,6 +10,7 @@ parsing:
   unsupported_error: "This file type is not supported."
   too_large_error: "This file exceeds the configured upload size."
 images:
+  retry_cooldown_seconds: 180
   decorative_min_area: 4096
   upscale_width: 1000
   crop_padding: 12

@@ -1,0 +1,275 @@
+"""One bounded CrewAI agent per turn, provider fallback and grounded output."""
+
+import json
+import os
+from datetime import date
+from time import time, sleep
+from threading import Lock
+
+# Crew telemetry is unnecessary for banking data; disable it before importing the framework.
+for _key in ('CREWAI_TRACING_ENABLED', 'CREWAI_TELEMETRY_ENABLED', 'LITELLM_TELEMETRY'):
+    os.environ[_key] = 'false'
+os.environ['OTEL_SDK_DISABLED'] = 'true'
+os.environ['DO_NOT_TRACK'] = '1'
+
+import httpx
+from crewai import Agent, Crew, LLM, Task
+from openai import OpenAI
+
+from app.config import ROOT, get_settings
+from app.ingest.models import digest
+from app.llm import FakeLLM, LLMClient, QuotaGuard, _vision_fallback_error
+from app.log import log, mask_text, mask_payload
+from app.verify import check, canonical_citations
+
+_pace_lock = Lock()
+_reservations = []
+
+
+def pace(tokens, *, enabled=True):
+    if not enabled:
+        return
+    cfg = get_settings().conversation['agent']
+    cap = cfg['free_tpm'] * cfg['token_safety_fraction']
+    if tokens > cap:
+        raise ValueError('Request exceeds configured free-tier token budget')
+    with _pace_lock:
+        state = ROOT / 'data/test_cache/groq_pacing.json'
+        if state.exists():
+            _reservations[:] = json.loads(state.read_text())
+        while True:
+            now = time()
+            _reservations[:] = [(stamp, amount) for stamp, amount in _reservations if now - stamp < 60]
+            if sum(amount for _, amount in _reservations) + tokens <= cap and len(_reservations) < cfg['free_rpm']:
+                _reservations.append((now, tokens))
+                state.parent.mkdir(parents=True, exist_ok=True)
+                state.write_text(json.dumps(_reservations))
+                return now
+            wait = min(30, max(0.1, 60 - (now - _reservations[0][0])))
+            log.step('LLM', 'free-tier pacing', seconds=round(wait))
+            sleep(wait)
+
+
+def settle(stamp, tokens):
+    with _pace_lock:
+        state = ROOT / 'data/test_cache/groq_pacing.json'
+        reservations = json.loads(state.read_text()) if state.exists() else []
+        reservations = [(when, tokens if when == stamp else amount) for when, amount in reservations]
+        state.write_text(json.dumps(reservations))
+
+
+class LoggedTransport(httpx.BaseTransport):
+    def __init__(self, quota, usage, *, cache=False, sample='', pacing=True, schemas=None, validators=None):
+        self.inner = httpx.HTTPTransport()
+        self.quota, self.usage = quota, usage
+        self.cache, self.sample, self.pacing = cache, sample, pacing
+        self.schemas = schemas or {}
+        self.validators = validators or {}
+
+    def proposals(self, payload):
+        result = []
+        for choice in payload.get('choices', []):
+            for call in choice.get('message', {}).get('tool_calls', []):
+                function = call.get('function', {})
+                name = function.get('name')
+                try:
+                    self.validators[name].model_validate(json.loads(function.get('arguments', '{}')))
+                    valid = True
+                except (KeyError, ValueError):
+                    valid = False
+                result.append({'name': name, 'schema_valid': valid})
+        return result
+
+    def handle_request(self, request):
+        cfg = get_settings()
+        body = json.loads(request.content)
+        body['messages'] = mask_payload(body.get('messages', []))
+        # Groq requires an explicit empty properties map on argument-free native tools.
+        for tool in body.get('tools', []):
+            name = tool['function']['name']
+            if name in self.schemas:
+                schema = self.schemas[name]
+                def expand(value):
+                    if isinstance(value, list):
+                        return [expand(child) for child in value]
+                    if not isinstance(value, dict):
+                        return value
+                    if '$ref' in value:
+                        return expand(schema['$defs'][value['$ref'].split('/')[-1]])
+                    return {key: expand(child) for key, child in value.items() if key not in {'$defs', 'title'}}
+                tool['function']['parameters'] = expand(schema)
+                tool['function']['strict'] = False
+            parameters = tool['function'].setdefault('parameters', {})
+            parameters.setdefault('properties', {})
+            if not parameters['properties']:
+                parameters.pop('required', None)
+        payload = json.dumps(body, ensure_ascii=False).encode()
+        from app.prepass import MOBILE, ACCOUNT
+        # Independent scan catches any future prompt builder that bypasses the pre-pass.
+        for message in body['messages']:
+            content = str(message.get('content', ''))
+            if MOBILE.search(content) or ACCOUNT.search(content):
+                raise ValueError('Unmasked identity in provider prompt')
+        key = digest(payload + self.sample.encode() + str(cfg.conversation['agent']['cache_version']).encode())
+        path = ROOT / 'data/test_cache' / f'agent_{key}.json'
+        if self.cache and path.exists():
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            self.usage.append({**saved['usage'], 'cached': True, 'tool_proposals': self.proposals(saved['payload'])})
+            return httpx.Response(200, json=saved['payload'], headers=saved.get('headers', {}))
+        estimate = int((len(json.dumps(body['messages'], ensure_ascii=False)) // cfg.chunking['chars_per_token']
+                    + len(json.dumps(body.get('tools', []))) // cfg.conversation['agent']['schema_chars_per_token']
+                    + cfg.conversation['agent']['protocol_overhead_tokens']) * cfg.conversation['agent']['input_token_multiplier']) + cfg.conversation['agent']['max_output_tokens']
+        backoffs = [0, *cfg.conversation['agent']['backoff_seconds']] if self.cache else [0]
+        for attempt, backoff in enumerate(backoffs):
+            if backoff:
+                log.step('LLM', '429 backoff', seconds=backoff)
+                sleep(backoff)
+            reservation = pace(estimate, enabled=self.pacing)
+            self.quota.reserve('llm')
+            outbound = httpx.Request(request.method, request.url, headers=request.headers, content=payload, extensions=request.extensions)
+            outbound.headers['content-length'] = str(len(payload))
+            with log.span('LLM', 'CrewAI native request', model=body['model'], attempt=attempt + 1):
+                response = self.inner.handle_request(outbound)
+                response.read()
+            log.step('LLM', 'provider status', status=response.status_code, reserved_tokens=estimate, tpm=response.headers.get('x-ratelimit-limit-tokens'), remaining=response.headers.get('x-ratelimit-remaining-tokens'))
+            if response.status_code != 429:
+                break
+        if response.status_code == 200:
+            result = response.json()
+            usage = result.get('usage', {})
+            if self.pacing:
+                settle(reservation, usage.get('total_tokens', estimate))
+            self.usage.append({**usage, 'cached': False, 'model': body['model'], 'tpm': response.headers.get('x-ratelimit-limit-tokens'), 'tool_proposals': self.proposals(result)})
+            log.step('LLM', 'token usage', **usage)
+            if self.cache:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({'payload': result, 'usage': self.usage[-1], 'headers': {key: value for key, value in response.headers.items() if key.startswith('x-ratelimit-')}}), encoding='utf-8')
+        return response
+
+    def close(self):
+        self.inner.close()
+
+
+def system_prompt(session, registry):
+    cfg, blocks = get_settings(), get_settings().prompts['agent_blocks']
+    auth = session['auth']
+    auth_block = blocks['auth_block']['anonymous']
+    if auth['state'] == 'AWAITING_OTP':
+        auth_block = blocks['auth_block']['awaiting']
+    if auth['state'] == 'VERIFIED':
+        user = registry.store.one('users', {'user_id': auth['user_id']})
+        auth_block = blocks['auth_block']['verified'].format(first_name=user['full_name'].split()[0])
+    active = session.get('active_flow')
+    flow_block = blocks['flow_block']['none']
+    if active:
+        definition = cfg.flows[active['flow']]
+        if active['status'] == 'AWAITING_CONFIRM':
+            flow_block = blocks['flow_block']['confirming'].format(flow_title=definition['title'])
+        else:
+            step = registry.flows.next_step(session)
+            flow_block = blocks['flow_block']['open'].format(flow_title=definition['title'], filled=mask_text(json.dumps(active['slots'])), missing=[step['slot']] if step else [], next_question=step['question'] if step else '')
+    docs = registry.files()['data']['files']
+    docs_block = blocks['docs_block']['some'].format(files=docs) if docs else blocks['docs_block']['none']
+    prompt = cfg.prompts['agent_system']
+    for key, value in {'bank_name': cfg.bank['name'], 'today': date.today().isoformat(), 'auth_block': auth_block, 'flow_block': flow_block, 'docs_block': docs_block}.items():
+        prompt = prompt.replace('{{' + key + '}}', str(value))
+    return mask_text(prompt)
+
+
+class Runner:
+    def __init__(self, llm=None, *, model=None, cache=False, sample='', quota=None):
+        self.llm, self.model, self.cache, self.sample, self.quota = llm, model, cache, sample, quota
+        self.usage = []
+
+    def _fake(self, messages, registry):
+        for _ in range(get_settings().agent['max_steps']):
+            result = self.llm.chat(messages)
+            if isinstance(result, str):
+                return result
+            for call in result.get('tool_calls', []):
+                tool = registry.tools.get(call['name'])
+                output = tool.invoke(call.get('arguments', {})) if tool and call['name'] in registry.visible() else {'ok': False, 'code': 'NOT_VERIFIED'}
+                messages.append({'role': 'tool', 'content': json.dumps(output)})
+            if not result.get('tool_calls'):
+                return result.get('text', '')
+        return get_settings().conversation['safe']['tool_limit']
+
+    def _native(self, model, messages, registry, *, repair=False):
+        cfg = get_settings()
+        client = None
+        if model.startswith('groq/'):
+            transport = LoggedTransport(self.quota or QuotaGuard(), self.usage, cache=self.cache, sample=self.sample, schemas={tool.name: tool.args_schema.model_json_schema() for tool in registry.list()}, validators={tool.name: tool.args_schema for tool in registry.list()})
+            client = OpenAI(api_key=cfg.secrets.groq_api_key.get_secret_value(), base_url=cfg.conversation['agent']['endpoint'], timeout=cfg.llm.timeout_seconds, max_retries=0, http_client=httpx.Client(transport=transport, timeout=cfg.llm.timeout_seconds))
+            llm = LLM(model=model.removeprefix('groq/'), custom_openai=True, base_url=cfg.conversation['agent']['endpoint'], api_key=cfg.secrets.groq_api_key.get_secret_value(), timeout=cfg.llm.timeout_seconds, max_retries=0, temperature=cfg.models.temperature, max_tokens=cfg.conversation['agent']['max_output_tokens'])
+            llm.model = model.removeprefix('groq/')
+            llm._get_sync_client = lambda: client
+            assert llm._get_sync_client() is client
+        else:
+            # Native Gemini is available without LiteLLM; keys remain inside the SDK.
+            llm = LLM(model=model, api_key=cfg.secrets.gemini_api_key.get_secret_value(), timeout=cfg.llm.timeout_seconds, temperature=cfg.models.temperature)
+            original_call = llm.call
+            def guarded_call(*args, **kwargs):
+                (self.quota or QuotaGuard()).reserve('llm')
+                with log.span('LLM', 'CrewAI native Gemini request', model=model):
+                    return original_call(*args, **kwargs)
+            llm.call = guarded_call
+        try:
+            if repair:
+                with log.span('VERIFY', 'one repair call', model=model):
+                    return llm.call(messages)
+            agent = Agent(role=cfg.conversation['agent']['role'], goal=cfg.conversation['agent']['goal'], backstory=messages[0]['content'], llm=llm, tools=registry.list(), allow_delegation=False, verbose=False, max_iter=cfg.agent['max_steps'], max_retry_limit=0)
+            task = Task(description=messages[-1]['content'], expected_output=cfg.conversation['agent']['expected_output'], agent=agent)
+            with log.span('AGENT', 'turn', model=model):
+                return str(Crew(agents=[agent], tasks=[task], verbose=False, memory=False, cache=False, tracing=False).kickoff())
+        finally:
+            if client:
+                client.close()
+
+    def run(self, session, message, registry):
+        cfg = get_settings()
+        history, used = [], 0
+        for item in reversed(session.get('history', [])[-cfg.session['history_turns'] * 2:]):
+            cost = len(item['content']) // cfg.chunking['chars_per_token']
+            if used + cost > cfg.conversation['agent']['history_token_budget']:
+                break
+            history.insert(0, item)
+            used += cost
+        task = cfg.conversation['agent']['task'].format(history=history, message=message)
+        messages = [{'role': 'system', 'content': system_prompt(session, registry)}, {'role': 'user', 'content': mask_text(task)}]
+        reply = None
+        if self.llm is not None:
+            reply = self._fake(messages, registry)
+        else:
+            for model in ([self.model] if self.model else [cfg.models.agent, *cfg.models.agent_fallbacks]):
+                try:
+                    reply = self._native(model, messages, registry)
+                    break
+                except Exception as exc:
+                    log.step('AGENT', 'provider failed', model=model, error=type(exc).__name__)
+                    if not _vision_fallback_error(exc):
+                        break
+                    log.step('AGENT', 'fallback switch', model=model)
+        if reply is None:
+            return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
+        reply = canonical_citations(reply)
+        valid, errors = check(reply, registry.results)
+        if not valid:
+            repair = cfg.prompts['repair'].replace('{{bad_numbers}}', json.dumps(errors)).replace('{{sources}}', json.dumps(registry.results, default=str))
+            log.step('VERIFY', 'repair required', errors=errors)
+            if self.llm is not None:
+                reply = self.llm.chat([{'role': 'system', 'content': mask_text(repair)}])
+            else:
+                # Reuse the guarded native adapter, never an unmetered repair call.
+                try:
+                    reply = self._native(self.model or cfg.models.agent, [{'role': 'system', 'content': messages[0]['content']}, {'role': 'user', 'content': mask_text(repair)}], registry, repair=True)
+                except Exception:
+                    reply = ''
+            if not isinstance(reply, str) or not check(reply, registry.results)[0] or not reply:
+                reply = cfg.messages['answers']['unverified_number']
+        reply = canonical_citations(reply)
+        displays = list(dict.fromkeys(result['display'] for _, result in registry.results if result.get('display')))
+        for display in displays:
+            if display not in reply:
+                reply += '\n' + display
+        citations = [item for _, result in registry.results for item in result.get('data', {}).get('items', [])]
+        return {'reply': mask_text(reply), 'citations': citations, 'usage': self.usage}

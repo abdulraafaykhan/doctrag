@@ -79,6 +79,8 @@ class MemoryStore:
                 for key, value in fields.items():
                     if operation == "$set" or operation == "$setOnInsert" and new:
                         set_value(row, key, value)
+                    elif operation == "$unset":
+                        row.pop(key, None)
                     elif operation == "$inc":
                         set_value(row, key, (get(row, key) or 0) + value)
                     elif operation == "$addToSet":

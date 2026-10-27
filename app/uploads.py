@@ -101,7 +101,7 @@ class UploadService:
             )
             status = (
                 "Processing"
-                if result.get("paused_quota")
+                if result.get("paused_quota") or result.get("processing_state") == "needs_retry"
                 else "Partial"
                 if result["processing_state"] == "partial"
                 else "Ready"
@@ -289,6 +289,7 @@ class UploadWorker:
                         "namespace": "user",
                         "$or": [
                             {"processing_state": "queued"},
+                            {"processing_state": "needs_retry", "retry_after": {"$lte": utcnow()}},
                             {
                                 "embedding_state": "pending",
                                 "attachment.status": "Processing",

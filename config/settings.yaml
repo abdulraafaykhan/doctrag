@@ -8,7 +8,7 @@ bank:
 
 models:
   # CONFIRM model ids in the Groq console / AI Studio before first run (they change).
-  agent: "groq/openai/gpt-oss-120b"          # CrewAI/LiteLLM id style: provider/model
+  agent: "groq/qwen/qwen3.8-27b"            # native adapter preserves the complete provider model id
   agent_fallbacks:
     - "groq/openai/gpt-oss-20b"
     - "gemini/gemini-flash-lite-latest"
@@ -39,6 +39,7 @@ auth:
   held_messages_max: 3
 
 session:
+  lease_seconds: 600
   expires_hours: 24
   history_turns: 12
 
@@ -93,7 +94,7 @@ retrieval:
   rrf_k: 60
   rerank_to: 6
   parents_to_model: 5
-  context_token_budget: 4000
+  context_token_budget: 1200
   min_score: 0.55             # tune on the eval set
 
 statement:

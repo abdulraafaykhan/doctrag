@@ -130,6 +130,13 @@ class Pipeline:
                         mode="online" if customer else "ingest",
                         budget=budget,
                     )
+                    if result.get("needs_retry"):
+                        # Keep the parse checkpoint so a resume only retries failed crops.
+                        document.update(processing_state="needs_retry", retry_after=utcnow() + timedelta(seconds=cfg.knowledge["images"]["retry_cooldown_seconds"]))
+                        self.store.put("documents", identity, document)
+                        job.update(state="needs_retry", stage="parse", updated_at=utcnow())
+                        self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                        return document
                     ocr_pages += result["method"] != "decorative"
                     flags.extend(
                         {"page": element.page, "reason": flag}
@@ -263,6 +270,9 @@ class Pipeline:
         document = self.store.one("documents", {"doc_id": doc_id})
         if not document:
             raise ValueError("Unknown document")
+        if document.get("processing_state") == "needs_retry":
+            log.step("INGEST", "image retry required before completing job", doc=doc_id)
+            return
         job_id = "job_" + doc_id
         job = self.store.one("ingest_jobs", {"job_id": job_id})
         missing = self.store.find(

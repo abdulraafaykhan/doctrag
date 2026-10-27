@@ -196,6 +196,7 @@ class ImageCascade:
         cached = self.store.one("image_cache", query)
         if (
             cached
+            and not cached["result"].get("needs_retry")
             and cached["result"].get("cache_version")
             == cfg.knowledge["images"]["cache_version"]
             and (not cached.get("expires_at") or cached["expires_at"] > utcnow())
@@ -321,6 +322,12 @@ class ImageCascade:
                         response = json.loads(disk.read_text(encoding="utf-8"))
                         log.step("VLM", "disk cache hit", image=key[:8])
                     else:
+                        response = None
+                    # Temporary provider failures must never become permanent cache hits.
+                    if response is None or response.get("needs_retry") or (
+                        response.get("status") == "unreadable"
+                        and response.get("warning") == cfg.messages["upload"]["vision_unavailable"]
+                    ):
                         llm = self.llm or LLMClient()
                         try:
                             if self.llm is None and llm.quota.remaining()["vlm"] <= 0:
@@ -361,6 +368,8 @@ class ImageCascade:
                     if edge_cut:
                         flags.append("truncated")
                     result.update(
+                        needs_retry=response.get("needs_retry", False),
+                        processing_state="needs_retry" if response.get("needs_retry") else "done",
                         text=response["text"],
                         structured=structured,
                         truncated=edge_cut or bool((structured or {}).get("truncated")),

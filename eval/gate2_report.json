@@ -1,0 +1,71 @@
+{
+  "passed_live_gate": true,
+  "chosen_model": "groq/qwen/qwen3.8-27b",
+  "models": [
+    {
+      "model": "groq/openai/gpt-oss-20b",
+      "cases": 23,
+      "passed": 22,
+      "tool_calls": 9,
+      "valid": 8,
+      "tool_success": 0.8888888888888888,
+      "failures": [
+        "H6"
+      ]
+    },
+    {
+      "model": "groq/openai/gpt-oss-120b",
+      "cases": 23,
+      "passed": 21,
+      "tool_calls": 9,
+      "valid": 7,
+      "tool_success": 0.7777777777777778,
+      "failures": [
+        "B6",
+        "H6"
+      ]
+    },
+    {
+      "model": "groq/qwen/qwen3.8-27b",
+      "cases": 23,
+      "passed": 23,
+      "tool_calls": 7,
+      "valid": 7,
+      "tool_success": 1.0,
+      "failures": []
+    }
+  ],
+  "groups": {
+    "B": {
+      "passed": 42,
+      "total": 42
+    },
+    "G": {
+      "passed": 39,
+      "total": 39
+    },
+    "H": {
+      "passed": 9,
+      "total": 9
+    }
+  },
+  "tokens_total_evaluated": 152294,
+  "chat_turns": 117,
+  "agent_turns": 30,
+  "average_tokens_per_chat_turn": 1301.6581196581196,
+  "average_tokens_per_agent_turn": 5076.466666666666,
+  "pacific_day": "2026-10-26",
+  "quota_requests": {
+    "embed_requests": 101,
+    "vlm_requests": 41,
+    "llm_requests": 191
+  },
+  "context_token_budget": 1200,
+  "confirmed_tpm": 8000,
+  "limitations": [
+    "Deterministic OTP, confirmation, visibility and security shortcuts intentionally bypass the LLM even in live scenarios.",
+    "Live account operations use isolated synthetic customer stores; no real customer actions are submitted to Atlas.",
+    "Gemini agent fallback is covered with fake failures only, as real Phase 3 calls are restricted to Groq.",
+    "Token averages include cached logical responses; daily quota counts are actual reserved provider attempts."
+  ]
+}

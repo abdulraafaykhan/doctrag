@@ -12,3 +12,6 @@
 - Phase 2: sample ingestion stores parsed chunks once with embeddings deferred; Gate 1 alone makes real embedding requests, and resumptions fill only missing vectors using both test-cache and MongoDB caches.
 - Phase 2: image hashes use normalized pixels to deduplicate container encodings; bottom-edge ink identifies clipped rows, which are null and review-flagged even when a provider omits them.
 - Phase 2: extraction gate counts unreadable provider responses as flagged missing cells, never successful extraction; a passed safety gate does not imply every image was readable.
+# Phase 3: native CrewAI uses Groq's OpenAI-compatible endpoint with complete native model IDs (openai/ for GPT-OSS, qwen/ for Qwen); schemas retain Pydantic optional fields, structured masking precedes JSON serialization, and real B/G/H results are cached and paced at the confirmed 8,000 TPM.
+# Retryable vision failures remain needs_retry with a cooldown; independently OCR-validated complete rows remain eligible for exact lookup while cut-off/null rows are excluded.
+# Gate 2 selects Groq Qwen 3.8 27B: count every model-proposed tool call, including pre-execution schema failures; native CrewAI preserves qwen/ for Qwen and openai/ for GPT-OSS, with no LiteLLM dependency.
