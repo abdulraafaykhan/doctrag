@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "results": [
+    "sent bubble visible before response; thinking and disabled send",
+    "reload restores message and reply",
+    "second tab receives 409 and displays the message",
+    "pending attachment card and remove button delete early upload",
+    "files-only send; sent attachment opens and survives reload",
+    "OTP note, verified login chip, balance and option clicks as sent messages",
+    "explicit confirmation submits one request and shows its reference",
+    "GFM table and citation chip render; Sources includes page/version/date",
+    "failed send stays visible; Retry reuses the bubble",
+    "image thumbnail and in-page preview open/close; pending image removal",
+    "no horizontal overflow; composer visible at 360px",
+    "no horizontal overflow; composer visible at 1280px",
+    "dark scheme follows system preference"
+  ],
+  "failures": [],
+  "limitations": [
+    "Real HTTP UI fixture uses FakeLLM; live provider cases are separately recorded.",
+    "One text attachment is marked Ready by the fixture without ingestion; parsing/lifecycle tests run separately."
+  ]
+}

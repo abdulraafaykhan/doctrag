@@ -1,0 +1,11 @@
+{
+  "tests": 115,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 1,
+  "passed": true,
+  "tests_passed": 114,
+  "post_suite_masking_regressions": "16 passed, including card-policy false-redaction and generated-reference regressions.",
+  "full_suite_runs_after_refactor": 1,
+  "final_code_only_tests_passed": 33
+}

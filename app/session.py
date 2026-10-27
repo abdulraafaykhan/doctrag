@@ -42,6 +42,7 @@ class Sessions:
         if row is None or row.get('expires_at', now) <= now:
             row = {'session_id': uuid4().hex, 'auth': {'state': 'ANONYMOUS', 'failures': 0, 'held': [], 'candidates': {}}, 'history': [], 'active_flow': None, 'attachments': [], 'counters': {}, 'created_at': now}
         if row['auth']['state'] == 'VERIFIED' and now - row.get('last_active_at', now) >= timedelta(minutes=cfg.auth['session_idle_minutes']):
+            log.step('SESSION', 'idle authentication expired')
             previous = row.get('last_active_at')
             self.clear(row)
             row['expired_auth'] = True

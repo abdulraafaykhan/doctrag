@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from datetime import date
 from time import time, sleep
 from threading import Lock
@@ -18,7 +19,7 @@ from openai import OpenAI
 
 from app.config import ROOT, get_settings
 from app.ingest.models import digest
-from app.llm import FakeLLM, LLMClient, QuotaGuard, _vision_fallback_error
+from app.llm import QuotaGuard, _vision_fallback_error
 from app.log import log, mask_text, mask_payload
 from app.verify import check, canonical_citations
 
@@ -80,8 +81,7 @@ class LoggedTransport(httpx.BaseTransport):
                 result.append({'name': name, 'schema_valid': valid})
         return result
 
-    def handle_request(self, request):
-        cfg = get_settings()
+    def prepare(self, request):
         body = json.loads(request.content)
         body['messages'] = mask_payload(body.get('messages', []))
         # Groq requires an explicit empty properties map on argument-free native tools.
@@ -110,6 +110,11 @@ class LoggedTransport(httpx.BaseTransport):
             content = str(message.get('content', ''))
             if MOBILE.search(content) or ACCOUNT.search(content):
                 raise ValueError('Unmasked identity in provider prompt')
+        return body, payload
+
+    def handle_request(self, request):
+        cfg = get_settings()
+        body, payload = self.prepare(request)
         key = digest(payload + self.sample.encode() + str(cfg.conversation['agent']['cache_version']).encode())
         path = ROOT / 'data/test_cache' / f'agent_{key}.json'
         if self.cache and path.exists():
@@ -132,6 +137,11 @@ class LoggedTransport(httpx.BaseTransport):
                 response = self.inner.handle_request(outbound)
                 response.read()
             log.step('LLM', 'provider status', status=response.status_code, reserved_tokens=estimate, tpm=response.headers.get('x-ratelimit-limit-tokens'), remaining=response.headers.get('x-ratelimit-remaining-tokens'))
+            if response.status_code >= 400:
+                log.step('LLM', 'provider error', detail=response.text)
+            if self.cache and response.status_code == 429 and 'tokens per day' in response.text.lower():
+                # Evaluation waits for free quota; interactive turns retain their fast fallback.
+                self.wait_for_daily_quota(response, cfg)
             if response.status_code != 429:
                 break
         if response.status_code == 200:
@@ -145,6 +155,18 @@ class LoggedTransport(httpx.BaseTransport):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps({'payload': result, 'usage': self.usage[-1], 'headers': {key: value for key, value in response.headers.items() if key.startswith('x-ratelimit-')}}), encoding='utf-8')
         return response
+
+    def wait_for_daily_quota(self, response, cfg):
+        match = re.search(r'try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s', response.text, re.I)
+        delay = float(response.headers.get('retry-after', 0))
+        if match:
+            hours, minutes, seconds = match.groups()
+            delay = max(delay, int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds))
+        while delay > 0:
+            interval = min(delay, cfg.conversation['agent']['daily_wait_poll_seconds'])
+            log.step('LLM', 'daily quota wait', seconds=round(delay))
+            sleep(interval)
+            delay -= interval
 
     def close(self):
         self.inner.close()
@@ -227,6 +249,7 @@ class Runner:
 
     def run(self, session, message, registry):
         cfg = get_settings()
+        log.step('AGENT', 'turn start', state=session['auth']['state'], tools=registry.visible())
         history, used = [], 0
         for item in reversed(session.get('history', [])[-cfg.session['history_turns'] * 2:]):
             cost = len(item['content']) // cfg.chunking['chars_per_token']
@@ -253,6 +276,7 @@ class Runner:
             return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
         reply = canonical_citations(reply)
         valid, errors = check(reply, registry.results)
+        log.step('VERIFY', 'number and citation check', passed=valid, errors=errors)
         if not valid:
             repair = cfg.prompts['repair'].replace('{{bad_numbers}}', json.dumps(errors)).replace('{{sources}}', json.dumps(registry.results, default=str))
             log.step('VERIFY', 'repair required', errors=errors)
@@ -272,4 +296,5 @@ class Runner:
             if display not in reply:
                 reply += '\n' + display
         citations = [item for _, result in registry.results for item in result.get('data', {}).get('items', [])]
+        log.step('AGENT', 'final response', chars=len(reply), calls=len(registry.results))
         return {'reply': mask_text(reply), 'citations': citations, 'usage': self.usage}

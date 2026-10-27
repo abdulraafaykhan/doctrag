@@ -129,6 +129,7 @@ class BoundTool(BaseTool):
             log.step('TOOL', 'failed', tool=self.name, error=type(exc).__name__)
             result = envelope('UPSTREAM_ERROR', display=get_settings().messages['answers']['retry_later'])
         registry.results.append((self.name, result))
+        log.step('TOOL', 'result', tool=self.name, args=arguments or {}, code=result['code'])
         if result['code'] == 'INVALID_ARGUMENT':
             registry.invalid[self.name] = registry.invalid.get(self.name, 0) + 1
         if self.name.startswith('search_'):

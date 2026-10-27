@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from mimetypes import guess_type
 from threading import Event, Thread
 from time import monotonic
 from uuid import uuid4
@@ -57,7 +58,7 @@ class UploadService:
         attachment = {
             "id": uuid4().hex,
             "name": safe_name,
-            "mime": ext,
+            "mime": guess_type(safe_name)[0] or "application/octet-stream",
             "size": len(content),
             "kind": "image" if ext in {"png", "jpg", "jpeg", "webp"} else "document",
             "status": "Uploading",

@@ -1,6 +1,7 @@
 """Validated, cached configuration; credentials never enter printable settings."""
 
 from functools import lru_cache
+import json
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,7 @@ class Settings(BaseModel):
     seed: dict[str, Any]
     knowledge: dict[str, Any]
     conversation: dict[str, Any]
+    ui: dict[str, Any]
     flows: dict[str, Any]
     messages: dict[str, Any]
     products: dict[str, Any]
@@ -139,6 +141,7 @@ def load_settings(root: Path = ROOT, secrets: Secrets | None = None) -> Settings
             products=_yaml(root / "config/products.yaml"),
             knowledge=_yaml(root / "config/knowledge.yaml"),
             conversation=_yaml(root / "config/conversation.yaml"),
+            ui=json.loads((root / "config/ui.json").read_text(encoding="utf-8")),
             flows={path.stem: _yaml(path) for path in sorted((root / "config/flows").glob("*.yaml"))},
         )
         if credentials.log_level:

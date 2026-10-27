@@ -93,6 +93,9 @@ def search_knowledge(
         filters["doc_type"] = doc_type
     if doc_id:
         filters["doc_id"] = doc_id
+    if namespace == "user":
+        from app.ingest.models import utcnow
+        filters["expires_at"] = {"$gt": utcnow()}
     if not store.count("chunks", filters):
         return envelope(
             "NO_DOCUMENTS",
@@ -105,7 +108,7 @@ def search_knowledge(
     except QuotaExceeded:
         vector = None
         log.step("RAG", "embedding quota exhausted; keyword-only retrieval")
-    vector_filters = {key: value for key, value in filters.items() if key != "doc_id"}
+    vector_filters = {key: value for key, value in filters.items() if key not in {"doc_id", "expires_at"}}
     vector_rows = store.aggregate(
         "chunks",
         [

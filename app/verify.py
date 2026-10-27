@@ -5,7 +5,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from app.config import get_settings
 
-NUMBER = re.compile(r'(?P<rupee>₹\s*)?(?P<number>\d[\d,]*(?:\.\d+)?)(?P<percent>\s*%)?')
+NUMBER = re.compile(r'(?P<rupee>(?:₹|INR\s*|Rs\.?\s*)\s*)?(?P<number>\d[\d,]*(?:\.\d+)?)(?P<percent>\s*(?:%|percent\b|per\s+cent\b))?', re.I)
 
 
 def canonical_citations(text):

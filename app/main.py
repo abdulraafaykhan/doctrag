@@ -1,13 +1,16 @@
-"""Foundation API with explicit startup dependency checks."""
+"""Application factory, startup checks and production UI serving."""
 
 from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from app.config import get_settings
+from app.config import ROOT, get_settings
 from app.db import close_db, index_status, ping
 from app.llm import QuotaGuard
 from app.log import log
@@ -56,16 +59,6 @@ async def lifespan(app: FastAPI):
         close_db()
 
 
-app = FastAPI(
-    title=get_settings().bank["name"],
-    lifespan=lifespan,
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-)
-
-
-@app.middleware("http")
 async def request_logging(request, call_next):
     started = perf_counter()
     status = 500
@@ -83,7 +76,6 @@ async def request_logging(request, call_next):
         )
 
 
-@app.get("/api/health")
 def health():
     try:
         state = health_checks()
@@ -97,3 +89,47 @@ def health():
             },
             status_code=503,
         )
+
+
+def create_app(*, chat=None, uploads=None, checks=True):
+    """Dependency injection keeps API contract tests entirely off the network."""
+    from app.api import API, APIError, error_response
+    from app.chat import Chat
+    from app.uploads import UploadService
+
+    instance = FastAPI(title=get_settings().bank["name"], lifespan=lifespan if checks else None, docs_url=None, redoc_url=None, openapi_url=None)
+    service = chat or Chat()
+    instance.state.api = API(service, uploads or UploadService(service.store))
+    instance.middleware("http")(request_logging)
+
+    @instance.exception_handler(APIError)
+    async def api_error(request, exc):
+        return error_response(exc)
+
+    @instance.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        return error_response(APIError("invalid_request", "bad_request", 422))
+
+    @instance.exception_handler(HTTPException)
+    async def http_error(request, exc):
+        return error_response(APIError("not_found" if exc.status_code == 404 else "invalid_request", "not_found" if exc.status_code == 404 else "bad_request", exc.status_code))
+
+    @instance.exception_handler(Exception)
+    async def unexpected_error(request, exc):
+        log.step("API", "request failed", error=type(exc).__name__)
+        key = "busy" if str(exc) == "SESSION_BUSY" else "unavailable"
+        return error_response(APIError("request_failed", key, 409 if key == "busy" else 503))
+
+    instance.include_router(instance.state.api.router)
+    instance.add_api_route("/api/health", health, methods=["GET"])
+    @instance.get("/api/{path:path}")
+    def missing_api(path: str):
+        return error_response(APIError("not_found", "not_found", 404))
+
+    dist = ROOT / "frontend/dist"
+    if dist.exists():
+        instance.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
+    return instance
+
+
+app = create_app()

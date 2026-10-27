@@ -13,6 +13,9 @@ commands:
   - make it
 public_exceptions: ['minimum balance', 'monthly average balance', 'fees', 'charges', 'interest']
 personal_owners: ['my ', 'mera ', 'mere ']
+public_question_patterns:
+  - '^(?:can|does|are|is|what|how|when|where)\b.*(?:cheque book|chequebook|cheque leaves|debit card)'
+  - '^(?:can|does|are|is|what|how|when|where)\b.*(?:salary slips|bank statements|home loans?|personal loans?)'
 mixed_public_signals: ['NEFT charges', 'neft charges', 'UPI fees', 'upi fees', 'minimum balance']
 validation:
   query_min: 3
@@ -111,6 +114,7 @@ tools:
   flow_summary: Prepare a summary to ask the customer to confirm. Never submits.
   flow_cancel: Cancel the open request only when the customer explicitly wants cancellation.
 agent:
+  daily_wait_poll_seconds: 30
   bakeoff_models: [groq/openai/gpt-oss-20b, groq/openai/gpt-oss-120b, groq/qwen/qwen3.8-27b]
   role: Harbourline Bank assistant
   goal: Use the visible tools to help the customer safely.

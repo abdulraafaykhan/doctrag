@@ -30,18 +30,24 @@ class Chat:
         return outcome
 
     def turn(self, message, *, session_id=None, attachments=()):
-        cfg = get_settings()
         session = self.sessions.load(session_id)
         with self.sessions.lock(session['session_id']):
-            # Reload after acquiring the distributed lease so stale parallel turns cannot overwrite state.
-            session = self.store.one('sessions', {'session_id': session['session_id']})
-            result = self._turn(session, message, attachments)
-            session['last_active_at'] = utcnow()
-            if session.get('active_flow'):
-                session['active_flow']['updated_at'] = utcnow()
-            from datetime import timedelta
-            session['expires_at'] = utcnow() + timedelta(hours=cfg.session['expires_hours'])
-            self.sessions.save(session)
+            return self.turn_locked(message, session_id=session['session_id'], attachments=attachments)
+
+    def turn_locked(self, message, *, session_id, attachments=()):
+        """The HTTP boundary keeps the same lease until its transcript is persisted."""
+        from datetime import timedelta
+        session = self.store.one('sessions', {'session_id': session_id})
+        before = (session['auth']['state'], (session.get('active_flow') or {}).get('status'))
+        result = self._turn(session, message, attachments)
+        session['last_active_at'] = utcnow()
+        if session.get('active_flow'):
+            session['active_flow']['updated_at'] = utcnow()
+        session['expires_at'] = utcnow() + timedelta(hours=get_settings().session['expires_hours'])
+        self.sessions.save(session)
+        after = (session['auth']['state'], (session.get('active_flow') or {}).get('status'))
+        if before != after:
+            log.step('SESSION', 'state transition', before=before, after=after)
         return {**result, 'session_id': session['session_id'], 'state': session['auth']['state'], 'flow': session.get('active_flow'), 'options': self.options(session), 'attachments': session.get('attachments', [])}
 
     def options(self, session):
@@ -62,7 +68,7 @@ class Chat:
         parsed = extract(message)
         if not re.search(r'\w', message):
             return {'reply': cfg.conversation['safe']['empty'], 'citations': [], 'tools_called': []}
-        log.step('PREPASS', 'masked input', message=parsed.text)
+        log.step('PREPASS', 'masked input', message=parsed.text, hits=[name for name in ('mobile', 'account', 'code', 'postal_pin') if getattr(parsed, name)])
         if '[secret]' in parsed.text and auth['state'] != 'AWAITING_OTP' and not session.get('active_flow') and not any(word in parsed.command for word in cfg.conversation['personal']):
             return {'reply': cfg.conversation['safe']['secret_only'], 'citations': [], 'tools_called': []}
         if any(word in parsed.command for word in cfg.conversation['safe']['forbidden_patterns']):
@@ -71,10 +77,15 @@ class Chat:
         if len(attachments) > cfg.uploads['max_files_per_message']:
             return {'reply': cfg.knowledge['messages']['upload_limit'], 'citations': [], 'tools_called': []}
         for attachment in attachments:
-            UploadService(self.store).process(session['session_id'], attachment, defer_embeddings=True)
+            uploads = UploadService(self.store)
+            document = uploads._owned(session['session_id'], attachment)
+            if document.get('attachment', {}).get('status') not in {'Ready', 'Partial'}:
+                uploads.process(session['session_id'], attachment, defer_embeddings=True)
         fixed = None
         replay = []
         personal = any(word in parsed.command for word in cfg.conversation['personal'])
+        if any(re.search(pattern, parsed.command) for pattern in cfg.conversation['public_question_patterns']) and not any(word in parsed.command for word in cfg.conversation['personal_owners']):
+            personal = False
         if any(word in parsed.command for word in cfg.conversation['public_exceptions']) and not any(word in parsed.command for word in cfg.conversation['personal_owners']):
             personal = False
         if auth['state'] == 'VERIFIED' and parsed.account:

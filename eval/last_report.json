@@ -1,0 +1,285 @@
+{
+  "release_passed": false,
+  "complete": false,
+  "groups": {
+    "question": {
+      "passed": 19,
+      "failed": 11,
+      "quota_blocked": 0,
+      "blocked_cases": [],
+      "completed": 30,
+      "total": 30
+    },
+    "flow": {
+      "passed": 4,
+      "failed": 0,
+      "quota_blocked": 11,
+      "blocked_cases": [
+        {
+          "id": "F2",
+          "repetition": 2
+        },
+        {
+          "id": "F2",
+          "repetition": 3
+        },
+        {
+          "id": "F3",
+          "repetition": 1
+        },
+        {
+          "id": "F3",
+          "repetition": 2
+        },
+        {
+          "id": "F3",
+          "repetition": 3
+        },
+        {
+          "id": "F4",
+          "repetition": 1
+        },
+        {
+          "id": "F4",
+          "repetition": 2
+        },
+        {
+          "id": "F4",
+          "repetition": 3
+        },
+        {
+          "id": "F5",
+          "repetition": 1
+        },
+        {
+          "id": "F5",
+          "repetition": 2
+        },
+        {
+          "id": "F5",
+          "repetition": 3
+        }
+      ],
+      "completed": 4,
+      "total": 15
+    },
+    "attack": {
+      "passed": 12,
+      "failed": 0,
+      "quota_blocked": 3,
+      "blocked_cases": [
+        {
+          "id": "S4",
+          "repetition": 1
+        },
+        {
+          "id": "S4",
+          "repetition": 2
+        },
+        {
+          "id": "S4",
+          "repetition": 3
+        }
+      ],
+      "completed": 12,
+      "total": 15
+    }
+  },
+  "grounded_answer_proxy": 0.6333333333333333,
+  "valid_tool_calls": 39,
+  "tool_calls": 41,
+  "valid_tool_rate": 0.9512195121951219,
+  "failures": [
+    {
+      "id": "E01",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation",
+        "verification declined answer"
+      ]
+    },
+    {
+      "id": "E07",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E12",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E17",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E19",
+      "repetition": 1,
+      "errors": [
+        "answer lacks expected citation",
+        "verification declined answer"
+      ]
+    },
+    {
+      "id": "E21",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E22",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E23",
+      "repetition": 1,
+      "errors": [
+        "expected source/evidence missing",
+        "answer lacks expected citation"
+      ]
+    },
+    {
+      "id": "E24",
+      "repetition": 1,
+      "errors": [
+        "invalid tool proposal"
+      ]
+    },
+    {
+      "id": "E27",
+      "repetition": 1,
+      "errors": [
+        "invalid tool proposal"
+      ]
+    },
+    {
+      "id": "E28",
+      "repetition": 1,
+      "errors": [
+        "required tool missing"
+      ]
+    }
+  ],
+  "average_tokens_per_chat_turn": 2851.1639344262294,
+  "logical_tokens": 173921,
+  "quota_usage_by_pacific_day": [
+    {
+      "day": "2026-10-26",
+      "llm_requests": 243,
+      "embed_requests": 114,
+      "vlm_requests": 41
+    },
+    {
+      "day": "2026-10-27",
+      "llm_requests": 24,
+      "embed_requests": 6,
+      "vlm_requests": 0
+    }
+  ],
+  "models_used": [
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b"
+  ],
+  "tests": {
+    "tests": 115,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": true,
+    "tests_passed": 114,
+    "post_suite_masking_regressions": "16 passed, including card-policy false-redaction and generated-reference regressions.",
+    "full_suite_runs_after_refactor": 1,
+    "final_code_only_tests_passed": 33
+  },
+  "browser": {
+    "passed": true,
+    "results": [
+      "sent bubble visible before response; thinking and disabled send",
+      "reload restores message and reply",
+      "second tab receives 409 and displays the message",
+      "pending attachment card and remove button delete early upload",
+      "files-only send; sent attachment opens and survives reload",
+      "OTP note, verified login chip, balance and option clicks as sent messages",
+      "explicit confirmation submits one request and shows its reference",
+      "GFM table and citation chip render; Sources includes page/version/date",
+      "failed send stays visible; Retry reuses the bubble",
+      "image thumbnail and in-page preview open/close; pending image removal",
+      "no horizontal overflow; composer visible at 360px",
+      "no horizontal overflow; composer visible at 1280px",
+      "dark scheme follows system preference"
+    ],
+    "failures": [],
+    "limitations": [
+      "Real HTTP UI fixture uses FakeLLM; live provider cases are separately recorded.",
+      "One text attachment is marked Ready by the fixture without ingestion; parsing/lifecycle tests run separately."
+    ]
+  },
+  "http": {
+    "passed": true,
+    "results": [
+      {
+        "health": {
+          "status": "ok",
+          "db": "ok",
+          "indexes": {
+            "ready": true,
+            "missing_normal": [],
+            "search": {
+              "chunks_vector": "READY"
+            }
+          },
+          "quota_remaining": {
+            "embed": 897,
+            "vlm": 59,
+            "llm": 788
+          },
+          "keys_present": true,
+          "models_configured": {
+            "agent": "groq/qwen/qwen3.8-27b",
+            "agent_fallbacks": [
+              "groq/openai/gpt-oss-20b",
+              "gemini/gemini-flash-lite-latest"
+            ],
+            "vlm_ingest": "gemini-3.5-flash",
+            "vlm_ingest_fallbacks": [
+              "groq/qwen/qwen3.8-27b"
+            ],
+            "vlm_online": "groq/qwen/qwen3.8-27b",
+            "vlm_online_fallbacks": [
+              "gemini-3.5-flash"
+            ],
+            "embed": "gemini-embedding-001",
+            "embed_dims": 768,
+            "temperature": 0.1,
+            "reranker": "BAAI/bge-reranker-base"
+          }
+        }
+      },
+      {
+        "upload_status": "Ready",
+        "same_hash_reused": true,
+        "original_served": true,
+        "deleted_file_404": true
+      }
+    ]
+  },
+  "retrieval_top5": "29/30",
+  "extraction_unflagged_wrong": 0
+}

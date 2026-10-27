@@ -1,9 +1,55 @@
 # Harbourline Bank assistant
 
-The foundation provides configuration, masked logging, MongoDB indexes and demo
-data, provider clients with quotas, money helpers, and `GET /api/health`. Phase 2
-adds shared ingestion, local parsers, OCR/vision checks, embeddings, hybrid search,
-exact rate lookup, and session-owned upload processing and cleanup.
+The assistant provides document Q&A, exact rate lookup, session-owned uploads,
+in-chat demo OTP authentication, balances and statements, and confirmed cheque
+book / debit card requests. FastAPI serves the React UI after a production build.
+
+Install uv and Node 20+ (including npm), then run from this folder in PowerShell:
+
+```powershell
+uv venv --python 3.12
+uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+Copy-Item .env.example .env
+# Set the three credentials in .env locally; never paste them into chat or logs.
+.venv\Scripts\python.exe scripts\seed_db.py
+.venv\Scripts\python.exe scripts\create_indexes.py
+.venv\Scripts\python.exe scripts\make_sample_docs.py
+.venv\Scripts\python.exe scripts\ingest_bank_docs.py
+npm --prefix frontend ci
+.\scripts\run_dev.ps1
+```
+
+Open http://127.0.0.1:5173 for development. The Vite proxy forwards `/api` to
+port 8000; both processes print to the same terminal and stop with Ctrl+C.
+If this desktop runtime exposes Node without npm, `run_dev.ps1` also recognizes
+the npm CLI under ignored `data/tools/`; a normal Node installation needs no workaround.
+
+For production-style local serving:
+
+```powershell
+npm --prefix frontend run build
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open http://127.0.0.1:8000. Only one tab owns a chat; reload uses the same
+tab ID, while a second tab receives 409. Cookies must be enabled. Uploads expire
+after the configured retention period; expired cards remain visible after reload.
+The demo login is mobile `9000000001`, account `000000000001`, then any six digits.
+These are synthetic fixtures. See [docs/DEMO.md](docs/DEMO.md) for the six-step demo.
+
+Gate 3 commands (the live command spends free-tier quota only for uncached inputs):
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_gate3.py -q
+npm --prefix frontend run build
+.venv\Scripts\python.exe scripts\run_gate3.py
+.venv\Scripts\python.exe -m pytest -q
+```
+
+Live cases use the configured Groq pacing guard and retain both successes and
+failures in `data/test_cache/`. Existing cached cases are never regenerated.
+Customer actions in the evaluation use isolated synthetic records; bank retrieval
+reads the already-ingested Atlas corpus. `eval/last_report.md` records limitations.
 
 Use Python 3.12 from `.venv\Scripts\python.exe` for every command. Install the
 locked dependencies with `uv pip install --python .venv\Scripts\python.exe -r requirements.txt`.

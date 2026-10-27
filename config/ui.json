@@ -1,0 +1,10 @@
+{
+  "title": "Harbourline Bank", "new_chat": "New chat", "not_verified": "Not verified", "verified": "Verified as {name}",
+  "placeholder": "Ask a bank question or attach a document…", "send": "Send", "attach": "Attach", "remove": "Remove", "retry": "Retry", "close": "Close preview",
+  "thinking": "Thinking…", "reading_image": "Reading your image…", "processing": "Processing your document…", "sources": "Sources", "welcome": "How can we help? Ask about accounts, rates or bank documents.",
+  "otp_note": "Demo: any 6-digit code works. Never share a real OTP or PIN.", "files_only": "Please explain the attached files.", "secret": "[private code]",
+  "second_tab": "This chat is open in another tab", "unavailable": "Please try again in a moment.", "not_found": "This file or session is unavailable.", "expired": "Expired", "failed": "Failed", "ready": "Ready", "partial": "Partial", "uploading": "Uploading", "working": "Processing",
+  "too_many": "Attach up to {count} files per message.", "too_large": "Each file must be at most {size} MB.", "bad_type": "This file type is not supported.", "bad_request": "Please check your request.", "busy": "A message is already being processed. Please wait.", "delete": "Delete file", "deleted": "Deleted", "files": "Your files", "drop": "Drop files here", "preview": "Preview", "bytes_unit": "KB", "page": "page", "version": "version",
+  "cookie_name": "harbourline_session", "client_header": "x-client-id", "identifier_chars": 128, "tab_idle_seconds": 1800, "poll_ms": 2000, "heartbeat_ms": 30000, "ui_history_turns": 100, "event_chars": 80, "upload_read_extra_bytes": 1,
+  "backend_host": "127.0.0.1", "backend_port": 8000, "frontend_port": 5173, "column_width": 760
+}

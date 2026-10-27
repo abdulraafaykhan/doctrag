@@ -10,6 +10,18 @@ def test_specific_masks():
     assert mask_account("123456785511") == "****5511"
 
 
+def test_card_policy_words_are_not_secret_values():
+    text = 'Normal debit card delivery takes 7 working days.'
+    assert mask_text(text) == text
+    assert '1234' not in mask_text('card 1234')
+
+
+def test_generated_reference_survives_history_and_logging():
+    assert mask_text('Reference: CB-2610-0042.') == 'Reference: CB-2610-0042.'
+    assert mask_text('Reference: DC-2610-0042.') == 'Reference: DC-2610-0042.'
+    assert '123456789012' not in mask_text('CB-123456789012')
+
+
 @pytest.mark.parametrize(
     "raw",
     [

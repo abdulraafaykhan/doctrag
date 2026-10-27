@@ -7,7 +7,7 @@ from app.log import mask_text
 MOBILE = re.compile(r"(?<!\d)(?:\+91[ -]*)?([6-9](?:[ -]*\d){9})(?!\d)")
 ACCOUNT = re.compile(r"(?<!\d)(\d(?:[ -]*\d){11})(?!\d)")
 CODE = re.compile(r"(?<!\d)\d{6}(?!\d)")
-SECRET = re.compile(r"(?i)\b(?:otp|pin|cvv|password)\s*(?:is|:|=)?\s*\S+")
+SECRET = re.compile(r"(?i)\b(?:otp|pin|cvv|password)(?:\s+(?:is\s+)?|\s*[:=]\s*)\S+")
 
 
 @dataclass

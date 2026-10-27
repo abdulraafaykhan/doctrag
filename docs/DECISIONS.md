@@ -15,3 +15,6 @@
 # Phase 3: native CrewAI uses Groq's OpenAI-compatible endpoint with complete native model IDs (openai/ for GPT-OSS, qwen/ for Qwen); schemas retain Pydantic optional fields, structured masking precedes JSON serialization, and real B/G/H results are cached and paced at the confirmed 8,000 TPM.
 # Retryable vision failures remain needs_retry with a cooldown; independently OCR-validated complete rows remain eligible for exact lookup while cut-off/null rows are excluded.
 # Gate 2 selects Groq Qwen 3.8 27B: count every model-proposed tool call, including pre-execution schema failures; native CrewAI preserves qwen/ for Qwen and openai/ for GPT-OSS, with no LiteLLM dependency.
+- Phase 4: HttpOnly same-site session cookies bind file ownership; tab IDs bind chat actions; one session lease covers the turn and retry transcript, and UI transcripts mask credentials independently of model history.
+- Phase 4: browser checks use existing Playwright plus installed Edge with FakeLLM; live HTTP/Atlas/Groq results remain separately cached, including failures, and uncached cases use the configured Groq fallback when the primary daily token bucket is exhausted.
+- Phase 4: policy questions remain public despite cheque/card/statement keywords; numeric validation equates INR/₹ and percent/% while preserving currency-versus-percentage checks.

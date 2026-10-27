@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "health": {
+        "status": "ok",
+        "db": "ok",
+        "indexes": {
+          "ready": true,
+          "missing_normal": [],
+          "search": {
+            "chunks_vector": "READY"
+          }
+        },
+        "quota_remaining": {
+          "embed": 897,
+          "vlm": 59,
+          "llm": 788
+        },
+        "keys_present": true,
+        "models_configured": {
+          "agent": "groq/qwen/qwen3.8-27b",
+          "agent_fallbacks": [
+            "groq/openai/gpt-oss-20b",
+            "gemini/gemini-flash-lite-latest"
+          ],
+          "vlm_ingest": "gemini-3.5-flash",
+          "vlm_ingest_fallbacks": [
+            "groq/qwen/qwen3.8-27b"
+          ],
+          "vlm_online": "groq/qwen/qwen3.8-27b",
+          "vlm_online_fallbacks": [
+            "gemini-3.5-flash"
+          ],
+          "embed": "gemini-embedding-001",
+          "embed_dims": 768,
+          "temperature": 0.1,
+          "reranker": "BAAI/bge-reranker-base"
+        }
+      }
+    },
+    {
+      "upload_status": "Ready",
+      "same_hash_reused": true,
+      "original_served": true,
+      "deleted_file_404": true
+    }
+  ]
+}

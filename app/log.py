@@ -70,6 +70,10 @@ def mask_text(value: str) -> str:
             except ValueError:
                 pass
         digits = re.sub(r"\D", "", raw)
+        reference_digits = get_settings().conversation['agent']['reference_digits']
+        if re.fullmatch(r'\d{4}-\d{' + str(reference_digits) + '}', raw) and any(value[:match.start()].endswith(flow['reference_prefix'] + '-') for flow in get_settings().flows.values()):
+            # Generated request references are trace IDs, not customer credentials.
+            return raw
         if len(digits) == 12 and digits.startswith("91") and digits[2] in "6789":
             return mask_mobile(digits[2:])
         if len(digits) == 10 and digits[0] in "6789":
@@ -86,7 +90,7 @@ def mask_text(value: str) -> str:
         value,
     )
     value = re.sub(
-        r"(?i)\b(otp|pin|cvv|card(?: number)?)\s*[:=]?\s*[\d *-]+",
+        r"(?i)\b(otp|pin|cvv|card(?: number)?)\s*[:=]?\s*(?=[\d *-]*[\d*])[\d *-]+",
         r"\1 [REDACTED]",
         value,
     )

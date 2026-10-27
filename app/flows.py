@@ -39,6 +39,7 @@ class Flows:
             self.store.patch('pending_actions', {'token': active['pending_token']}, {'$set': {'status': 'cancelled'}})
         session['active_flow'] = None
         session.pop('postal_pin', None)
+        log.step('FLOW', 'cancel', flow=active['flow'] if active else None)
         return envelope('OK', display=get_settings().messages['flow']['cancelled'])
 
     def set_slots(self, session, name, **values):
@@ -80,6 +81,7 @@ class Flows:
                 session['active_flow'] = active
                 return envelope('INVALID_ARGUMENT', {'field': step['slot'], 'allowed': step.get('options', [])}, display=step['on_invalid'], hint=step['question'])
             slots[step['slot']] = value
+            log.step('FLOW', 'slot set', flow=name, slot=step['slot'])
         if name == 'debit_card' and slots.get('card_type') and self.store.one('requests', {'user_id': session['auth']['user_id'], 'type': name, 'slots.card_type': slots['card_type'], 'status': 'pending'}):
             return envelope('INVALID_ARGUMENT', display=cfg.conversation['safe']['duplicate'])
         if active.get('pending_token'):
@@ -89,6 +91,8 @@ class Flows:
         if 'address' in slots:
             active.pop('address_draft', None)
         session['active_flow'] = active
+        next_step = self.next_step(session)
+        log.step('FLOW', 'step', flow=name, slot=next_step['slot'] if next_step else None)
         return self.status(session) if self.next_step(session) else self.summary(session)
 
     def summary(self, session):
@@ -116,6 +120,7 @@ class Flows:
         summary = definition['summary_template'].format(**values)
         self.store.put('pending_actions', {'token': token}, {'token': token, 'user_id': session['auth']['user_id'], 'account_id': session['auth']['account_id'], 'session_id': session['session_id'], 'flow': active['flow'], 'slots': slots, 'status': 'pending', 'expires_at': utcnow() + timedelta(minutes=cfg.flow['pending_action_minutes'])})
         active.update(status='AWAITING_CONFIRM', pending_token=token, summary=summary, updated_at=utcnow())
+        log.step('FLOW', 'summary created', flow=active['flow'])
         return envelope('OK', {'options': definition['confirm_buttons']}, display=summary)
 
     def submit(self, session):
@@ -150,6 +155,7 @@ class Flows:
                 return envelope('UPSTREAM_ERROR', display=cfg.messages['flow']['submitted_error'])
         session['last_submission'] = request
         session['active_flow'] = None
+        log.step('FLOW', 'submitted', flow=request['type'], reference=request['ref_no'])
         try:
             self.store.patch('pending_actions', {'token': pending['token']}, {'$set': {'status': 'confirmed', 'idempotency_key': key}})
             audit_id = uuid4().hex
@@ -180,6 +186,7 @@ class Flows:
             return self.status(session)
         if active['status'] == 'AWAITING_CONFIRM':
             if lower in cfg.conversation['commands']['confirm']:
+                log.step('FLOW', 'confirm', flow=active['flow'])
                 return self.submit(session)
             if any(lower.startswith(word) for word in cfg.conversation['commands']['change']):
                 for step in self.definition(active['flow'])['steps']:

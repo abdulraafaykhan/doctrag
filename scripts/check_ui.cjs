@@ -1,0 +1,107 @@
+/* Uses installed Playwright and Edge; never downloads browser binaries. */
+const { chromium } = require(process.argv[2] || 'playwright');
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const ui = require('../config/ui.json');
+const results = [], failures = [];
+(async () => {
+ const browser = await chromium.launch({ channel: 'msedge', headless: true });
+ try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  page.on('pageerror', error => failures.push(`browser: ${error.message}`));
+  await page.goto('http://127.0.0.1:8001');
+  await page.waitForFunction(() => !document.querySelector('textarea').disabled);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  await page.route('**/api/chat', async route => { await held; await route.continue(); }, { times: 1 });
+  await page.locator('textarea').fill('hi');
+  await page.getByRole('button', { name: ui.send, exact: true }).click();
+  await page.getByText(ui.thinking, { exact: true }).waitFor();
+  assert.equal(await page.locator('.sent').last().textContent(), 'hi');
+  assert.equal(await page.getByRole('button', { name: ui.send, exact: true }).isDisabled(), true);
+  results.push('sent bubble visible before response; thinking and disabled send');
+  release(); await page.locator('.reply').first().waitFor();
+  await page.reload(); await page.locator('.reply').first().waitFor();
+  assert.equal(await page.locator('.sent').first().textContent(), 'hi');
+  results.push('reload restores message and reply');
+  const other = await context.newPage();
+  await other.goto('http://127.0.0.1:8001');
+  await other.getByRole('alert').getByText(ui.second_tab, { exact: true }).waitFor();
+  results.push('second tab receives 409 and displays the message'); await other.close();
+  await page.locator('input[type=file]').setInputFiles({ name: 'browser-note.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional Harbourline bank document, browser fixture only.') });
+  await page.getByRole('button', { name: `${ui.remove} browser-note.txt`, exact: true }).waitFor();
+  await page.waitForFunction(() => !document.querySelector('.remove').disabled);
+  await page.getByRole('button', { name: `${ui.remove} browser-note.txt`, exact: true }).click();
+  await page.locator('.remove').waitFor({ state: 'detached' });
+  results.push('pending attachment card and remove button delete early upload');
+  await page.locator('input[type=file]').setInputFiles({ name: 'sent-note.txt', mimeType: 'text/plain', buffer: Buffer.from('Fictional bank browser fixture.') });
+  await page.waitForFunction(() => document.querySelector('.remove') && !document.querySelector('.remove').disabled);
+  const cards = await page.evaluate(async () => (await (await fetch('/api/session', { headers: { 'x-client-id': sessionStorage.getItem('client_id') } })).json()).attachments);
+  await page.request.post(`http://127.0.0.1:8001/fixture/ready/${cards[0].id}`);
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Send').disabled);
+  await page.getByRole('button', { name: ui.send, exact: true }).click();
+  await page.locator('.sent .card').waitFor(); await page.locator('.reply').nth(1).waitFor();
+  const opened = context.waitForEvent('page'); await page.locator('.sent .file').click();
+  const preview = await opened; await preview.waitForLoadState();
+  assert.ok(preview.url().includes('/api/files/')); await preview.close();
+  await page.reload(); await page.locator('.sent .card').waitFor();
+  results.push('files-only send; sent attachment opens and survives reload');
+  async function send(text) {
+   const count = await page.locator('.reply').count();
+   await page.locator('textarea').fill(text); await page.getByRole('button', { name: ui.send, exact: true }).click();
+   await page.locator('.reply').nth(count).waitFor();
+  }
+  await send('my balance 9000000001 000000000001'); await page.getByText(ui.otp_note, { exact: true }).waitFor();
+  await send('123456'); await page.getByText('Verified as Demo', { exact: true }).waitFor();
+  assert.ok((await page.locator('.reply').last().textContent()).includes('57,600.00'));
+  await send('I need a new chequebook');
+  for (const option of ['40 pages', 'Emergency (within 1 week)', 'Address on file']) await page.getByRole('button', { name: option, exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm', exact: true }).waitFor();
+  assert.ok((await page.locator('.sent').allTextContents()).includes('40 pages'));
+  results.push('OTP note, verified login chip, balance and option clicks as sent messages');
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await page.getByText(/Your cheque book request is submitted/).waitFor();
+  results.push('explicit confirmation submits one request and shows its reference');
+  await send('Show the fixture source rate table');
+  await page.locator('.citation').last().click();
+  assert.equal(await page.locator('.reply').last().locator('details').getAttribute('open'), '');
+  await page.getByText(/Browser fixture rate table/).waitFor();
+  assert.equal(await page.locator('.table-scroll table').count(), 1);
+  results.push('GFM table and citation chip render; Sources includes page/version/date');
+  await page.route('**/api/chat', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'fixture_network_failure', message: ui.unavailable }) }), { times: 1 });
+  await page.locator('textarea').fill('retry fixture hello');
+  await page.getByRole('button', { name: ui.send, exact: true }).click();
+  await page.getByRole('button', { name: ui.retry, exact: true }).waitFor();
+  const sent = await page.locator('.sent').count();
+  await page.getByRole('button', { name: ui.retry, exact: true }).click();
+  await page.getByRole('button', { name: ui.retry, exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await page.locator('.sent').count(), sent);
+  results.push('failed send stays visible; Retry reuses the bubble');
+  await page.locator('input[type=file]').setInputFiles('data/gate1_images/rates_00.png');
+  await page.waitForFunction(() => document.querySelector('.remove') && !document.querySelector('.remove').disabled);
+  await page.locator('footer .cards .file').click();
+  await page.locator('dialog img').waitFor();
+  await page.getByRole('button', { name: ui.close, exact: true }).click();
+  await page.getByRole('button', { name: `${ui.remove} rates_00.png`, exact: true }).click();
+  await page.locator('.remove').waitFor({ state: 'detached' });
+  results.push('image thumbnail and in-page preview open/close; pending image removal');
+  for (const width of [360, 1280]) {
+   await page.setViewportSize({ width, height: 900 });
+   await page.evaluate(() => { const messages = document.querySelector('.messages'); messages.scrollTop = messages.scrollHeight; });
+   const layout = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth, input: document.querySelector('textarea').getBoundingClientRect().toJSON() }));
+   assert.ok(layout.content <= layout.viewport, `overflow at ${width}: ${layout.content}`);
+   assert.ok(layout.input.width > 0 && layout.input.right <= width && layout.input.bottom <= 900);
+   await page.screenshot({ path: `data/ui-${width}.png`, fullPage: true });
+   results.push(`no horizontal overflow; composer visible at ${width}px`);
+  }
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const background = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
+  assert.notEqual(background, 'rgb(250, 252, 251)');
+  results.push('dark scheme follows system preference');
+  await context.close();
+ } catch (error) { failures.push(error.stack); }
+ finally { await browser.close(); }
+ fs.writeFileSync('eval/ui_checks.json', JSON.stringify({ passed: !failures.length, results, failures, limitations: ['Real HTTP UI fixture uses FakeLLM; live provider cases are separately recorded.', 'One text attachment is marked Ready by the fixture without ingestion; parsing/lifecycle tests run separately.'] }, null, 2));
+ console.log(JSON.stringify({ results, failures }, null, 2)); process.exitCode = failures.length ? 1 : 0;
+})();
