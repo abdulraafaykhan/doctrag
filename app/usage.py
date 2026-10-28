@@ -23,7 +23,7 @@ class TokenMeter:
             if session_id not in self._sessions:
                 self._sessions[session_id] = {key: int(saved.get(key, 0)) for key in empty()}
 
-    def add(self, session_id, model, kind, input_tokens, output_tokens, *, cached=False):
+    def add(self, session_id, model, kind, input_tokens, output_tokens, *, cached=False, estimated=False):
         values = {'in': 0 if cached else int(input_tokens or 0), 'out': 0 if cached else int(output_tokens or 0), 'calls': 1}
         values['total'] = values['in'] + values['out']
         session_id = session_id or 'background'
@@ -36,7 +36,7 @@ class TokenMeter:
             if request is not None:
                 for key in values:
                     request[key] += values[key]
-            self.events.append({'session_id': session_id, 'model': model, 'kind': kind, 'cached': cached, **values})
+            self.events.append({'session_id': session_id, 'model': model, 'kind': kind, 'cached': cached, 'estimated': estimated, **values})
             from app.log import request_context, span_stack
             trace = request_context.get()
             if trace is not None:
@@ -50,7 +50,7 @@ class TokenMeter:
             store = store_context.get()
             if store is not None and session_id != 'background':
                 store.patch('sessions', {'session_id': session_id}, {'$inc': {f'counters.tokens.{key}': value for key, value in values.items()}})
-            return {**values, 'cached': cached, 'session_total': current['total']}
+            return {**values, 'cached': cached, 'estimated': estimated, 'session_total': current['total']}
 
     def session(self, session_id):
         with self._lock:

@@ -18,6 +18,7 @@ class Secrets(BaseSettings):
     gemini_api_key: SecretStr = Field(min_length=1)
     mongodb_uri: SecretStr = Field(min_length=1)
     log_level: str | None = None
+    local_llm_url: str | None = None
 
 
 class Models(BaseModel):
@@ -74,6 +75,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     secrets: Secrets = Field(exclude=True, repr=False)
     models: Models
+    local_llm: dict[str, Any]
     quotas: Quotas
     database: Database
     logging: Logging

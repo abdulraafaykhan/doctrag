@@ -8,8 +8,9 @@ bank:
 
 models:
   # CONFIRM model ids in the Groq console / AI Studio before first run (they change).
-  agent: "groq/qwen/qwen3.8-27b"            # native adapter preserves the complete provider model id
+  agent: "local/default"                   # switch back to groq/qwen/qwen3.8-27b to use Groq first
   agent_fallbacks:
+    - "groq/qwen/qwen3.8-27b"
     - "groq/openai/gpt-oss-20b"
     - "gemini/gemini-flash-lite-latest"
   vlm_ingest: "gemini-3.5-flash"             # offline tables: accuracy first
@@ -22,6 +23,13 @@ models:
   embed_dims: 768
   reranker: "BAAI/bge-reranker-base"         # only used if features.reranker is true
   temperature: 0.1
+
+local_llm:
+  server_id: "154"
+  max_tokens: 768
+  timeout_seconds: 25
+  text_field: "response"
+  protocol_retries: 1
 
 features:
   reranker: false        # needs extra install (sentence-transformers); keep off until eval needs it

@@ -141,13 +141,16 @@ class Runner:
         self.llm, self.model, self.cache, self.sample, self.quota = llm, model, cache, sample, quota
         self.usage = []
 
-    def _fake(self, messages, registry):
+    def _fake(self, messages, registry, *, llm=None):
+        client = llm or self.llm
         for _ in range(get_settings().agent['max_steps']):
-            with log.span('LLM', 'scripted request', model='scripted'):
-                result = self.llm.chat(messages)
+            with log.span('LLM', 'scripted request' if llm is None else 'local tool turn', model=getattr(client, 'model', 'scripted')):
+                result = client.chat(messages)
             if isinstance(result, str):
                 return result
             outputs = []
+            if llm is not None:
+                messages.append({'role': 'assistant', 'content': json.dumps(result)})
             for call in result.get('tool_calls', []):
                 tool = registry.tools.get(call['name'])
                 output = tool.invoke(call.get('arguments', {})) if tool and call['name'] in registry.visible() else {'ok': False, 'code': 'NOT_VERIFIED'}
@@ -163,6 +166,10 @@ class Runner:
     @traced('AGENT', 'native agent')
     def _native(self, model, messages, registry, *, repair=False):
         cfg = get_settings()
+        if model.startswith('local/'):
+            from app.local_llm import LocalClient
+            local = LocalClient(registry, model=model, usage=self.usage)
+            return local.chat(messages, plain=True) if repair else self._fake(list(messages), registry, llm=local)
         client = None
         if model.startswith('groq/'):
             transport = LoggedTransport(self.quota or QuotaGuard(), self.usage, cache=self.cache, sample=self.sample, schemas={tool.name: tool.args_schema.model_json_schema() for tool in registry.list()}, validators={tool.name: tool.args_schema for tool in registry.list()})
@@ -236,7 +243,8 @@ class Runner:
                     break
                 except Exception as exc:
                     log.step('AGENT', 'provider failed', model=model, error=type(exc).__name__)
-                    if not _vision_fallback_error(exc):
+                    from app.local_llm import LocalLLMError
+                    if not isinstance(exc, LocalLLMError) and not _vision_fallback_error(exc):
                         break
                     log.step('AGENT', 'fallback switch', model=model)
         if reply is None:
