@@ -33,11 +33,13 @@ def main():
         blob = (ROOT / "data/gate1_images" / name).read_bytes()
         image = Image.open(io.BytesIO(blob)).convert("RGB")
         key = digest(f"{image.size}|".encode() + image.tobytes())
-        job = store.one("ingest_jobs", {"job_id": "retry_" + key})
+        document = store.one('documents', {'filename': name, 'owner_key': 'bank'})
+        job = (document or {}).get('job')
         if not job or job['state'] != 'done':
             cooldown = True
-            store.patch("image_cache", {"owner_key": "bank", "image_hash": key}, {"$set": {"result.needs_retry": True, "result.processing_state": "needs_retry"}})
-            store.put("ingest_jobs", {"job_id": "retry_" + key}, {"job_id": "retry_" + key, "image": name, "state": "needs_retry", "updated_at": utcnow()})
+            store.patch("extractions", {"owner_key": "bank", "image_hash": key}, {"$set": {"result.needs_retry": True, "result.processing_state": "needs_retry"}})
+            if document:
+                store.patch('documents', {'doc_id': document['doc_id']}, {'$set': {'job.state': 'needs_retry', 'job.updated_at': utcnow()}})
         pending.append((name, key, blob))
     # A cooldown avoids repeating the provider burst that caused the original failures.
     deadline = monotonic() + (get_settings().knowledge["images"]["retry_cooldown_seconds"] if cooldown else 0)
@@ -48,7 +50,7 @@ def main():
     for name, key, blob in pending:
         result = ImageCascade(store).extract(blob, "bank", mode="ingest")
         state = "needs_retry" if result.get("needs_retry") else "done"
-        store.patch("ingest_jobs", {"job_id": "retry_" + key}, {"$set": {"state": state, "updated_at": utcnow()}})
+        store.patch('documents', {'filename': name, 'owner_key': 'bank'}, {'$set': {'job.state': state, 'job.updated_at': utcnow()}})
         truth = next(row for row in cases if row["image"] == name)
         actual = (result.get("structured") or {}).get("rows", [])
         correct = sum(str(value).replace(" ", "") == str(actual[i][j]).replace(" ", "") for i, row in enumerate(truth["rows"]) for j, value in enumerate(row) if i < len(actual) and j < len(actual[i]))

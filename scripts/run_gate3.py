@@ -23,7 +23,7 @@ from tests.memory_store import MemoryStore
 
 class EvaluationStore(MemoryStore):
     """Isolate demo customer actions while retaining real Atlas hybrid retrieval."""
-    knowledge = {'chunks', 'sections', 'documents', 'rate_rows', 'rate_tables', 'embed_cache'}
+    knowledge = {'chunks', 'sections', 'documents', 'rate_rows', 'rate_tables', 'extractions'}
 
     def __init__(self):
         super().__init__()

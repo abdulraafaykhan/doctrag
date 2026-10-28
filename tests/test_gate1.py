@@ -432,7 +432,7 @@ def test_crash_resumes_embedding_stage_without_reparse(store, sandbox, monkeypat
         resumed["skipped"]
         and {row["chunk_id"] for row in store.find("chunks", {})} == ids
     )
-    assert store.one("ingest_jobs", {})["state"] == "done"
+    assert store.one("documents", {})['job']["state"] == "done"
 
 
 def test_upload_budget_pause_preserves_bank_queries(store, sandbox):
@@ -450,7 +450,7 @@ def test_upload_budget_pause_preserves_bank_queries(store, sandbox):
     )
     result = service.process("session_a", attachment["id"])
     assert result["status"] == "Processing"
-    assert store.one("ingest_jobs", {})["state"] == "paused_quota"
+    assert store.one("documents", {})['job']["state"] == "paused_quota"
     assert embeddings.embed(["Bank FAQ remains available"], query=True)[0][0] == 1
 
 

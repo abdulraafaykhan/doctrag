@@ -12,9 +12,9 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from app.config import ROOT, get_settings
 from app.ingest.models import digest, utcnow
-from app.llm import LLMClient, QuotaExceeded
-from app.log import log, mask_text
-from app.vision import normalize_numeric_tokens, postprocess_vision
+from app.llm import LLMClient, QuotaExceeded, record_usage
+from app.log import log, mask_text, mask_payload
+from app.vision import normalize_numeric_tokens, postprocess_vision, render_vision
 
 _ocr_lock = Lock()
 
@@ -182,18 +182,63 @@ def validate_fields(structured, blocks):
     return flags
 
 
+def compare_extraction(raw, selected, blocks, vlm_ran):
+    """Record cell provenance without changing the cascade's selection rule."""
+    fields = []
+    lines = ocr_lines(blocks)
+    if isinstance(raw, dict) and isinstance(raw.get('rows'), list):
+        header_index = _header(lines)
+        header = lines[header_index] if lines else []
+        columns = raw.get('columns', [])
+        centers = [sum(point[0] for point in block[0]) / 4 for block in header]
+        body = lines[header_index + 1:]
+        for row_index, row in enumerate(raw['rows']):
+            cells = [[] for _ in columns]
+            if row_index < len(body) and len(centers) == len(columns):
+                for box, text, _ in body[row_index]:
+                    center = sum(point[0] for point in box) / 4
+                    cells[min(range(len(centers)), key=lambda index: abs(centers[index] - center))].append(text)
+            for col, value in enumerate(row):
+                local = ' '.join(cells[col]) if col < len(cells) else ''
+                chosen_rows = (selected or {}).get('rows', [])
+                chosen = chosen_rows[row_index][col] if row_index < len(chosen_rows) and col < len(chosen_rows[row_index]) else None
+                match = bool(local) and value is not None and (_numbers(local) == _numbers(value) if _numbers(local) or _numbers(value) else local.casefold().strip() == str(value).casefold().strip())
+                fields.append({'path': f'row {row_index + 1} / col {columns[col] if col < len(columns) else col + 1}', 'ocr_value': mask_text(local), 'vlm_value': mask_payload(value), 'match': match, 'selected': 'vlm' if chosen is not None else 'none', 'reason': 'OCR verifies the selected value' if match else 'field is null' if chosen is None else 'VLM selected; disagreement flagged for review'})
+    elif isinstance(raw, dict):
+        local_lines = [' '.join(block[1] for block in line) for line in lines]
+        def visit(item, label=''):
+            if isinstance(item, dict) and 'value' not in item:
+                for key, child in item.items():
+                    if key not in {'confidence', 'overall_confidence', 'uncertain', 'notes', 'kind', 'type'}:
+                        visit(child, key)
+                return
+            value = item.get('value') if isinstance(item, dict) else item
+            if isinstance(value, (dict, list)):
+                return
+            local = next((line for line in local_lines if label.casefold().replace('_', ' ') in line.casefold().replace('_', ' ')), '')
+            local = re.sub(r'^\s*' + re.escape(label).replace('_', '[ _]') + r'\s*[:=]?\s*', '', local, flags=re.I)
+            match = value is not None and bool(local) and (_numbers(value) == _numbers(local) if _numbers(value) or _numbers(local) else str(value).casefold().strip() == local.casefold().strip())
+            # A value absent from OCR is nulled by postprocess_vision; record that fact.
+            chosen = 'vlm' if value is not None and (not _numbers(value) or all(number in _numbers(' '.join(local_lines)) for number in _numbers(value))) else 'none'
+            fields.append({'path': label, 'ocr_value': mask_text(local), 'vlm_value': mask_payload(value), 'match': match, 'selected': chosen, 'reason': 'OCR verifies the selected value' if match else 'not found in OCR; field nulled' if chosen == 'none' else 'VLM selected; disagreement flagged for review'})
+        visit(raw)
+    agreed = sum(field['match'] for field in fields)
+    return {'status': ('disagree' if agreed < len(fields) else 'agree') if fields else 'vlm_only' if vlm_ran and not blocks else 'ocr_only' if blocks and not vlm_ran else 'not_compared', 'agreed_count': agreed, 'disagreed_count': len(fields) - agreed, 'fields': fields}
+
+
 class ImageCascade:
     def __init__(self, store, llm=None, ocr=None):
         self.store, self.llm, self.ocr = store, llm, ocr or run_ocr
 
-    def extract(self, blob: bytes, owner_key: str, *, mode: str, budget=None):
+    def extract(self, blob: bytes, owner_key: str, *, mode: str, budget=None, doc_id=None, filename='', page=1, bbox=None, namespace=None):
         cfg = get_settings()
         with Image.open(io.BytesIO(blob)) as original:
             image = original.convert("RGB")
         # Container extraction may encode identical PDF/PPTX pixels differently.
         key = digest(f"{image.size}|".encode() + image.tobytes())
         query = {"image_hash": key, "owner_key": owner_key}
-        cached = self.store.one("image_cache", query)
+        extraction_id = 'ext_' + digest(f'{owner_key}|{doc_id}|{page}|{bbox}|{key}')[:24]
+        cached = self.store.one("extractions", query)
         if (
             cached
             and not cached["result"].get("needs_retry")
@@ -203,8 +248,16 @@ class ImageCascade:
         ):
             log.step("OCR", "image cache hit", image=key[:8], source='vlm' if cached['result'].get('structured') else 'ocr', reason='cached extraction')
             log.upload_details(source='vlm' if cached['result'].get('structured') else 'ocr')
-            return {**cached["result"], "cache_hit": True}
+            if cached['result'].get('structured'):
+                record_usage(model=cached.get('vlm', {}).get('model') or getattr(cfg.models, f'vlm_{mode}'), kind='vlm', cached=True)
+            if cached.get('ocr', {}).get('ran'):
+                record = {key: value for key, value in cached.items() if key != '_id'}
+                record.update(extraction_id=extraction_id, doc_id=doc_id, filename=filename, page=page, bbox=bbox, namespace=namespace or ('bank' if owner_key == 'bank' else 'user'))
+                record['result']['extraction_id'] = extraction_id
+                self.store.put('extractions', {'extraction_id': extraction_id}, record)
+                return {**record['result'], 'cache_hit': True}
         settings = cfg.knowledge["images"]
+        blocks, response, text, why_ran, ocr_ran = [], {}, '', '', False
         if image.width * image.height < settings["decorative_min_area"]:
             result = {
                 "text": "",
@@ -217,6 +270,7 @@ class ImageCascade:
                 "validated": True,
             }
         else:
+            ocr_ran = True
             blocks = self.ocr(image)
             text = "\n".join(block[1] for block in blocks)
             kind, critical, confidence, density = classify(
@@ -249,6 +303,8 @@ class ImageCascade:
                 or density < settings["paragraph_min_density"]
                 or len(text.split()) < settings["paragraph_min_words"]
             ):
+                log.step('VLM', 'cascade decision', why=f'{kind}; critical numbers={critical}; OCR confidence={confidence:.3f}; sparse text={density < settings["paragraph_min_density"]}')
+                why_ran = ', '.join(reason for reason, selected in [('table' if kind == 'table' else kind, kind != 'paragraph'), ('critical numbers', critical), ('low confidence', confidence < cfg.ocr['min_confidence']), ('sparse text', density < settings['paragraph_min_density'])] if selected)
                 if budget is not None and not budget():
                     result.update(
                         flags=["vlm_page_limit"], needs_review=True, validated=False
@@ -321,9 +377,11 @@ class ImageCascade:
                     )
                     if disk.exists():
                         response = json.loads(disk.read_text(encoding="utf-8"))
+                        if not response.get('needs_retry'):
+                            record_usage(model=primary, kind='vlm', cached=True)
                         log.step("VLM", "disk cache hit", image=key[:8])
                     else:
-                        response = None
+                        response = {'text': cached['result']['text'], 'structured': cached['result'].get('structured'), 'status': 'readable', 'model': primary} if cached and not cached['result'].get('needs_retry') else None
                     # Temporary provider failures must never become permanent cache hits.
                     if response is None or response.get("needs_retry") or (
                         response.get("status") == "unreadable"
@@ -339,7 +397,7 @@ class ImageCascade:
                                 prompt,
                                 mode=mode,
                                 pii_redacted=True,
-                                local_ocr=mask_text(text),
+                                local_ocr=text,
                                 cut_off_rows=cut_rows,
                             )
                         finally:
@@ -352,9 +410,9 @@ class ImageCascade:
                     structured = response.get("structured")
                     if isinstance(structured, dict):
                         structured = postprocess_vision(
-                            structured, mask_text(text), cut_off_rows=cut_rows
+                            structured, text, cut_off_rows=cut_rows
                         )
-                        response["text"] = json.dumps(structured, ensure_ascii=False)
+                        response["text"] = render_vision(structured)
                     flags = (
                         validate_table(structured, blocks)
                         if kind == "table"
@@ -385,12 +443,18 @@ class ImageCascade:
         source = 'vlm' if result.get('structured') else result['method'] if result['method'] != 'vlm' else 'ocr'
         log.upload_details(source=source)
         result["cache_version"] = settings["cache_version"]
-        record = {**query, "result": result, "created_at": utcnow()}
+        result['extraction_id'] = extraction_id
+        comparison = compare_extraction(response.get('raw_structured', response.get('structured')), result.get('structured'), blocks, result['method'] == 'vlm')
+        record = {**query, 'extraction_id': extraction_id, 'doc_id': doc_id, 'namespace': namespace or ('bank' if owner_key == 'bank' else 'user'), 'filename': filename, 'page': page, 'bbox': bbox, 'kind': result['classification'] if result['classification'] in {'table', 'form', 'screenshot', 'paragraph', 'handwriting'} else 'screenshot', 'ocr': {'ran': bool(blocks), 'avg_confidence': sum(float(block[2]) for block in blocks) / len(blocks) if blocks else 0, 'text': mask_text(text), 'blocks': [{'text': mask_text(block[1]), 'conf': float(block[2]), 'bbox': np.asarray(block[0]).tolist()} for block in blocks]}, 'vlm': {'ran': result['method'] == 'vlm', 'why_ran': why_ran, 'model': response.get('model', getattr(cfg.models, f'vlm_{mode}')) if response else None, 'text': mask_text(response.get('raw_text', response.get('text', ''))), 'structured': result.get('structured'), 'confidence': result['confidence'] if result['method'] == 'vlm' else None}, 'compare': comparison, 'selected_source': source if source in {'ocr', 'vlm'} else 'none', 'selected_reason': 'VLM selected; OCR validation flags retained' if source == 'vlm' and result['flags'] else 'VLM selected; OCR verifies numbers' if source == 'vlm' else 'Local OCR selected' if source == 'ocr' else 'Decorative image skipped', 'flags': result['flags'], 'needs_review': result['needs_review'], "result": result, "created_at": utcnow(), 'expires_at': None}
         if owner_key != "bank":
             record["expires_at"] = utcnow() + timedelta(
                 hours=cfg.retention["image_cache_hours"]
             )
-        self.store.put("image_cache", query, record)
+        record['ocr']['ran'] = ocr_ran
+        nulled = [field['path'] for field in comparison['fields'] if field['selected'] == 'none']
+        if nulled:
+            record['selected_reason'] += '; fields left null after OCR/geometry checks: ' + ', '.join(nulled)
+        self.store.put("extractions", {'extraction_id': extraction_id}, record)
         log.step(
             "VLM" if result["method"] == "vlm" else "OCR",
             "image result",

@@ -97,7 +97,8 @@ def test_otp_history_never_stores_secrets_and_bad_uploads_are_json(services):
     assert response.json()['auth_state'] == 'VERIFIED'
     assert '₹57,600.00' in response.json()['reply_markdown']
     public = json.dumps(client.get('/api/session').json())
-    assert all(secret not in public for secret in ('123456', '9000000001', '000000000001'))
+    assert '123456' in public
+    assert all(secret not in public for secret in ('9000000001', '000000000001'))
     assert upload(client, sid, 'bad.exe').status_code == 422
     assert upload(client, sid, 'bad.pdf', b'not a PDF').status_code == 422
     assert set(client.post('/api/chat', json={}).json()) == {'error', 'message'}
@@ -138,8 +139,8 @@ def test_busy_session_and_expired_session_have_safe_errors(services):
     assert set(response.json()) == {'error', 'message'}
     assert not llm.calls
     store.patch('sessions', {'session_id': sid}, {'$set': {'expires_at': utcnow() - timedelta(seconds=1)}})
-    assert client.get('/api/session').status_code == 404
-    assert send(client, sid, 'hi').status_code == 404
+    assert client.get('/api/session').status_code == 410
+    assert send(client, sid, 'hi').json()['code'] == 'SESSION_EXPIRED'
 
 
 def test_other_tab_cannot_bypass_binding_with_new_chat_or_ui_event(services):
@@ -214,7 +215,7 @@ def test_request_summaries_and_image_ingest(services, monkeypatch):
     original = log.step
     def capture(area, action, **fields):
         state = request_context.get()
-        if state is not None and action.startswith(('chat  total=', 'upload  total=')):
+        if state is not None and action.startswith(('/api/chat  total=', '/api/upload  total=', 'upload  total=')):
             summaries.append(state['id'] + '  ' + action)
         original(area, action, **fields)
     monkeypatch.setattr(log, 'step', capture)
@@ -265,7 +266,7 @@ def test_db_debug_aggregates_and_context_resets(services, monkeypatch):
     monkeypatch.setattr('app.ingest.store.collection', lambda name: SimpleNamespace(find_one=lambda query, **kwargs: None))
     with log.request('chat') as state:
         Store().one('sessions', {})
-        assert state['spans'][0][0] == 'DB'
+        assert state['spans'][0]['area'] == 'DB'
         request_id = state['id']
     assert request_context.get() is None
     assert not any('find one' in line for line in lines)

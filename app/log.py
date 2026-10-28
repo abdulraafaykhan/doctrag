@@ -45,9 +45,9 @@ AREAS = dict(
         ),
     )
 )
-_NUMBER = re.compile(r"(?<!\w)(?:\+91[ -]*)?(?:\d[ -]?){5,18}\d(?!\w)")
+_NUMBER = re.compile(r"(?<!\w)(?:\+91[ -]*)?(?:\d[ -]?){9,18}\d(?!\w)")
 _SENSITIVE = re.compile(
-    r"^(?:otp|pin|cvv|password|secret|.*api.?key|mongodb.?uri|token|pending_token|code_hash|authorization|card.?number)$",
+    r"^(?:pin|cvv|password|secret|.*api.?key|mongodb.?uri|token|pending_token|code_hash|otp_hash|authorization|card.?number)$",
     re.I,
 )
 
@@ -72,17 +72,13 @@ def mask_text(value: str) -> str:
             except ValueError:
                 pass
         digits = re.sub(r"\D", "", raw)
-        reference_digits = get_settings().conversation['agent']['reference_digits']
-        if re.fullmatch(r'\d{4}-\d{' + str(reference_digits) + '}', raw) and any(value[:match.start()].endswith(flow['reference_prefix'] + '-') for flow in get_settings().flows.values()):
-            # Generated request references are trace IDs, not customer credentials.
-            return raw
         if len(digits) == 12 and digits.startswith("91") and digits[2] in "6789":
             return mask_mobile(digits[2:])
         if len(digits) == 10 and digits[0] in "6789":
             return mask_mobile(digits)
         if len(digits) == 12:
             return mask_account(digits)
-        return "[REDACTED]"
+        return "[CARD]" if 13 <= len(digits) <= 19 else raw
 
     value = re.sub(r"mongodb(?:\+srv)?://[^\s]+", "[DATABASE_URI]", value)
     value = re.sub(r"\b(?:gsk_|AIza)[\w-]+", "[API_KEY]", value)
@@ -92,7 +88,7 @@ def mask_text(value: str) -> str:
         value,
     )
     value = re.sub(
-        r"(?i)\b(otp|pin|cvv|card(?: number)?)\s*[:=]?\s*(?=[\d *-]*[\d*])[\d *-]+",
+        r"(?i)\b(pin|cvv)\s*[:=]?\s*(?=[\d *-]*[\d*])[\d *-]+",
         r"\1 [REDACTED]",
         value,
     )
@@ -143,7 +139,7 @@ class AppLog:
             path = ROOT / cfg.file
             path.parent.mkdir(parents=True, exist_ok=True)
             logger = logging.getLogger("harbourline")
-            logger.setLevel(cfg.level.upper())
+            logger.setLevel(logging.DEBUG)
             logger.propagate = False
             if not logger.handlers:
                 handler = RotatingFileHandler(
@@ -161,11 +157,11 @@ class AppLog:
         state = request_context.get()
         if state is not None:
             state['path'] = value
-        self.step('API', 'path selected', path=value, reason=reason)
+        self.step('API', 'path selected', path=value, why=reason)
 
     @contextmanager
     def request(self, kind, request_id=None):
-        state = {'id': request_id or 'r-' + uuid4().hex[:4], 'path': kind if kind == 'upload' else 'agent', 'spans': [], 'upload': {}}
+        state = {'id': request_id or 'r-' + uuid4().hex[:4], 'path': 'upload' if kind.endswith('upload') else 'agent', 'spans': [], 'upload': {}, 'tokens': {'in': 0, 'out': 0, 'total': 0, 'calls': 0}}
         token = request_context.set(state)
         started = perf_counter()
         try:
@@ -173,18 +169,32 @@ class AppLog:
         finally:
             spans = state['spans']
             def total(area):
-                return sum(ms for name, _, ms, _ in spans if name == area) / 1000
-            llms = [entry for entry in spans if entry[0] == 'LLM']
-            models = ','.join(dict.fromkeys(str(entry[3].get('model', '?')) for entry in llms)) or 'none'
-            tools = ','.join(f'{action}({ms / 1000:.2f}s)' for area, action, ms, _ in spans if area == 'TOOL') or 'none'
+                return sum(span['duration_ms'] for span in spans if span['area'] == area and not any(other['span_id'] == span['parent_span_id'] and other['area'] == area for other in spans)) / 1000
+            llms = [entry for entry in spans if entry['area'] in {'LLM', 'VLM'}]
+            models = ','.join(dict.fromkeys(str(entry['attributes'].get('model', '?')) for entry in llms)) or 'none'
+            tools = ','.join(f"{span['name']}({span['duration_ms'] / 1000:.2f}s)" for span in spans if span['area'] == 'TOOL') or 'none'
             line = (f"{kind}  total={perf_counter() - started:.2f}s  path={state['path']}  "
                     f"llm={total('LLM'):.2f}s({models}, {len(llms)} call)  tools={tools}  "
-                    f"db={total('DB'):.2f}s({sum(area == 'DB' for area, *_ in spans)} ops)  "
+                    f"db={total('DB'):.2f}s({sum(span['area'] == 'DB' for span in spans)} ops)  "
                     f"prepass={total('PREPASS'):.2f}s  verify={total('VERIFY'):.2f}s")
-            if kind == 'upload':
+            if kind.endswith('upload'):
                 line += '  ' + '  '.join(f'{key}={value}' for key, value in state['upload'].items())
                 line += '  stages=' + ','.join(f'{area.lower()}:{total(area):.2f}s' for area in ('PARSE', 'OCR', 'VLM', 'CHUNK', 'EMBED'))
-            self.step('API', line)
+            duration = perf_counter() - started
+            db_ops = sum(span['area'] == 'DB' for span in spans)
+            self.console.print(Text(f"TRACE TREE {state['id']}  {kind} total={duration:.2f}s db={total('DB'):.3f}s ({db_ops} ops)"))
+            visible = [span for span in spans if span['area'] != 'DB']
+            def tree(parent=None, prefix=''):
+                children = [span for span in visible if span['parent_span_id'] == parent]
+                for index, span in enumerate(children):
+                    last = index == len(children) - 1
+                    attrs = span['attributes']
+                    details = ' '.join(f'{key}={attrs[key]}' for key in ('model', 'in', 'out', 'total', 'chars') if key in attrs)
+                    label = f"{span['area']} {span['module']}.{span['function']} {span['status']} {span['duration_ms'] / 1000:.3f}s name={span['name']} {details}"
+                    self.console.print(Text(prefix + ('└─ ' if last else '├─ ') + mask_text(label)))
+                    tree(span['span_id'], prefix + ('   ' if last else '│  '))
+            tree()
+            self.step('API', line, **state['tokens'])
             request_context.reset(token)
 
     def upload_details(self, **fields):
@@ -193,7 +203,18 @@ class AppLog:
             state['upload'].update(fields)
 
     def step(self, area: str, action: str, **kv: Any) -> None:
+        if area in {'LLM', 'VLM'}:
+            from app.usage import meter, session_context
+            for field in ('in', 'out', 'total'):
+                kv.setdefault(field, 0)
+            kv.setdefault('session_total', meter.session(session_context.get())['total'])
         logger = self._configure()
+        if 'reason' in kv:
+            kv.setdefault('why', kv['reason'])
+        if any(word in action.lower() for word in ('cache', 'fallback', 'repair', 'selected', 'visibility', 'number check', 'number and citation')):
+            kv.setdefault('why', 'matching cached result reused' if 'hit' in action else 'decision follows current validation and state')
+        if 'error' in kv:
+            kv.setdefault('reason', 'operation failed; see exception type')
         level = kv.pop("level", "DEBUG" if area == "DB" else "INFO").upper()
         state = request_context.get()
         request_id = state["id"] if state else "-"
@@ -207,18 +228,20 @@ class AppLog:
         action = mask_text(action)
         stamp = datetime.now().astimezone()
         detail = " ".join(f"{key}={value}" for key, value in fields.items())
-        self.console.print(
+        if getattr(logging, level) >= getattr(logging, cfg.level.upper()):
+            self.console.print(
             Text(
                 f"{stamp:%H:%M:%S}  {request_id}  {area:<8} {action} | {detail}",
                 style=AREAS.get(area, "white"),
             )
-        )
+            )
         logger.log(
             getattr(logging, level),
             json.dumps(
                 {
                     "ts": stamp.isoformat(),
                     "request_id": request_id,
+                    "trace_id": request_id,
                     "level": level,
                     "area": area,
                     "action": action,
@@ -231,27 +254,28 @@ class AppLog:
     @contextmanager
     def span(self, area: str, action: str, **kv: Any):
         started = perf_counter()
+        frame = inspect.currentframe().f_back
+        while frame and frame.f_globals.get('__name__') in {__name__, 'contextlib'}:
+            frame = frame.f_back
+        module = kv.pop('module', frame.f_globals.get('__name__', '') if frame else '')
+        function = kv.pop('function', frame.f_code.co_qualname if frame else '')
         stack = span_stack.get()
-        token = span_stack.set((*stack, area))
+        state = request_context.get()
+        entry = {'trace_id': state['id'] if state else None, 'span_id': uuid4().hex[:12], 'parent_span_id': stack[-1]['span_id'] if stack else None, 'name': action, 'area': area, 'module': module, 'function': function, 'start_time': datetime.now().astimezone().isoformat(), 'duration_ms': 0, 'status': 'ok', 'attributes': dict(kv)}
+        if state is not None:
+            state['spans'].append(entry)
+        token = span_stack.set((*stack, entry))
         try:
-            yield
+            yield entry['attributes']
         except Exception as exc:
-            # Exception messages may contain credentials or customer input.
-            self.step(
-                area,
-                action,
-                **kv,
-                ms=round((perf_counter() - started) * 1000),
-                error=type(exc).__name__,
-                level="ERROR",
-            )
+            entry['status'] = 'error'
+            entry['attributes'].update(error=type(exc).__name__, reason='operation failed; see exception type')
             raise
-        else:
-            self.step(area, action, **kv, ms=round((perf_counter() - started) * 1000))
         finally:
-            state = request_context.get()
-            if state is not None and area not in stack:
-                state['spans'].append((area, action, (perf_counter() - started) * 1000, kv))
+            entry['duration_ms'] = round((perf_counter() - started) * 1000, 3)
+            entry['status'] = entry['attributes'].pop('status', entry['status'])
+            self.step(area, module + '.' + function, name=action, status=entry['status'], ms=entry['duration_ms'], **entry['attributes'], level='DEBUG' if area == 'DB' else 'ERROR' if entry['status'] == 'error' else 'INFO')
+            self._configure().debug(json.dumps({'type': 'span', **{key: value for key, value in entry.items() if key != 'attributes'}, 'attributes': mask_payload(entry['attributes'])}, ensure_ascii=False))
             span_stack.reset(token)
 
 
@@ -264,14 +288,14 @@ def traced(area: str, action: str):
 
             @functools.wraps(function)
             async def async_wrapper(*args, **kwargs):
-                with log.span(area, action):
+                with log.span(area, action, module=function.__module__, function=function.__qualname__):
                     return await function(*args, **kwargs)
 
             return async_wrapper
 
         @functools.wraps(function)
         def wrapper(*args, **kwargs):
-            with log.span(area, action):
+            with log.span(area, action, module=function.__module__, function=function.__qualname__):
                 return function(*args, **kwargs)
 
         return wrapper

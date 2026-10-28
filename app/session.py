@@ -27,8 +27,13 @@ class Sessions:
     def __init__(self, store=None):
         self.store = store or Store()
 
-    def save(self, session):
-        self.store.put('sessions', {'session_id': session['session_id']}, session)
+    def save(self, session, *, create=False):
+        if create:
+            self.store.put('sessions', {'session_id': session['session_id']}, session)
+        else:
+            # Uploads, heartbeats and metering update these fields independently of the chat lease.
+            independent = {'_id', 'counters', 'attachments', 'uploads', 'last_seen', 'client_id', 'lease_until', 'lease_token'}
+            self.store.patch('sessions', {'session_id': session['session_id']}, {'$set': {key: value for key, value in session.items() if key not in independent}})
 
     def audit(self, session, event):
         stamp, key = utcnow(), uuid4().hex
@@ -40,17 +45,14 @@ class Sessions:
         row = self.store.one('sessions', {'session_id': session_id}) if session_id else None
         existing = row is not None and row.get('expires_at', now) > now
         if row is None or row.get('expires_at', now) <= now:
-            row = {'session_id': uuid4().hex, 'auth': {'state': 'ANONYMOUS', 'failures': 0, 'held': [], 'candidates': {}}, 'history': [], 'active_flow': None, 'attachments': [], 'counters': {}, 'created_at': now}
-        if row['auth']['state'] == 'VERIFIED' and now - row.get('last_active_at', now) >= timedelta(minutes=cfg.auth['session_idle_minutes']):
-            log.step('SESSION', 'idle authentication expired')
-            previous = row.get('last_active_at')
-            self.clear(row)
-            row['expired_auth'] = True
-            # Conditional field updates cannot erase a lease acquired by another worker.
-            self.store.patch('sessions', {'session_id': row['session_id'], 'last_active_at': previous, '$or': [{'lease_until': {'$exists': False}}, {'lease_until': {'$lte': now}}]}, {'$set': {'auth': row['auth'], 'active_flow': None, 'history': [], 'last_submission': None}})
+            row = {'session_id': uuid4().hex, 'auth': {'state': 'ANONYMOUS', 'failures': 0, 'held': [], 'candidates': {}}, 'history': [], 'active_flow': None, 'uploads': [], 'attachments': [], 'counters': {'tokens': {'in': 0, 'out': 0, 'total': 0, 'calls': 0}}, 'created_at': now}
+        if existing and now - row.get('last_active_at', now) >= timedelta(minutes=cfg.session['idle_minutes']):
+            from app.uploads import UploadService
+            UploadService(self.store).expire_session(row['session_id'])
+            return self.load()
         if not existing:
             row.update(last_active_at=now, expires_at=now + timedelta(hours=cfg.session['expires_hours']))
-            self.save(row)
+            self.save(row, create=True)
         return row
 
     def clear(self, session):

@@ -33,6 +33,31 @@ def parse_vision_json(text: str) -> dict[str, Any]:
     return value
 
 
+def render_vision(value):
+    """Readable retrieval text, retaining explicit nulls rather than JSON syntax."""
+    if isinstance(value, dict) and isinstance(value.get('rows'), list):
+        columns = value.get('columns', [])
+        lines = [' | '.join(str(column) for column in columns), ' | '.join('---' for _ in columns)]
+        lines.extend(' | '.join('[unreadable]' if cell is None else str(cell) for cell in row) for row in value['rows'])
+        return '\n'.join(lines)
+    lines = []
+    def visit(item, label=''):
+        if isinstance(item, dict):
+            if 'value' in item:
+                visit(item['value'], label)
+            else:
+                for key, child in item.items():
+                    if key not in {'confidence', 'overall_confidence', 'uncertain'}:
+                        visit(child, f'{label} / {key}' if label else key)
+        elif isinstance(item, list):
+            for index, child in enumerate(item):
+                visit(child, f'{label} {index + 1}')
+        else:
+            lines.append(f"{label}: {'[unreadable]' if item is None else item}")
+    visit(value)
+    return '\n'.join(lines)
+
+
 def _words(text: str) -> set[str]:
     return set(re.findall(r"\w+", normalize_numeric_tokens(text).casefold()))
 
@@ -65,7 +90,7 @@ def postprocess_vision(
         ):
             return value
         if local_ocr and stripped not in ocr_numbers:
-            log.step("VERIFY", "vision numeric field absent from crop OCR")
+            log.step("VERIFY", "vision numeric field absent from crop OCR", why='the number is not present in this crop; leave it null')
             return None
         return normalized
 
@@ -83,6 +108,7 @@ def postprocess_vision(
                         "VERIFY",
                         "dropped vision notes absent from crop OCR",
                         count=len(notes) - len(kept),
+                        why='note contains words absent from this crop OCR',
                     )
                 item[key] = (
                     kept if isinstance(item[key], list) else (kept[0] if kept else None)
@@ -109,7 +135,7 @@ def postprocess_vision(
                 if 0 <= index < len(rows) and isinstance(rows[index], list):
                     rows[index] = [None] * len(rows[index])
                     item["truncated"] = True
-                    log.step("VERIFY", "nulled cut-off vision row", row=index)
+                    log.step("VERIFY", "nulled cut-off vision row", row=index, why='crop geometry or model indicates truncation')
         return item
 
     def mask(item: Any) -> Any:

@@ -34,7 +34,7 @@ A Login and OTP
 - A5 a 6-digit number with no OTP pending is not treated as an OTP. A6 "12ab" while awaiting OTP: asks for 6 digits, attempt counted.
 - A7 public FAQ while awaiting OTP: answered, still awaiting. A8 expired OTP: says so, offers resend, held request kept.
 - A9 three held messages then OTP: all replayed in order, one combined reply.
-- A10 different account number while verified: full re-login. A11 15 min idle: login again. A12 "cancel" while awaiting OTP: held messages cleared.
+- A10 different account number while verified: full re-login. A11 session.idle_minutes without user action: hard-delete the session and owned upload data, return SESSION_EXPIRED and start a fresh chat; heartbeat must not extend activity. A12 "cancel" while awaiting OTP: held messages cleared.
 
 B Flows
 - B1 "new chequebook", "40", "urgent", "yes" (address on file), "confirm": options 20/40/60 shown; summary lists pages, delivery, address; exactly one request with a reference number after confirm.

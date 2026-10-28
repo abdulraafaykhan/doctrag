@@ -32,6 +32,7 @@ class Chat:
 
     def turn(self, message, *, session_id=None, attachments=()):
         session = self.sessions.load(session_id)
+        self.store.patch('sessions', {'session_id': session['session_id']}, {'$set': {'last_active_at': utcnow()}})
         with self.sessions.lock(session['session_id']):
             return self.turn_locked(message, session_id=session['session_id'], attachments=attachments)
 
@@ -41,10 +42,11 @@ class Chat:
         session = self.store.one('sessions', {'session_id': session_id})
         before = (session['auth']['state'], (session.get('active_flow') or {}).get('status'))
         result = self._turn(session, message, attachments)
-        session['last_active_at'] = utcnow()
         if session.get('active_flow'):
             session['active_flow']['updated_at'] = utcnow()
         session['expires_at'] = utcnow() + timedelta(hours=get_settings().session['expires_hours'])
+        # A slow reply must not move the last user-action time forward or overwrite a newer action.
+        session.pop('last_active_at', None)
         self.sessions.save(session)
         after = (session['auth']['state'], (session.get('active_flow') or {}).get('status'))
         if before != after:
@@ -66,11 +68,10 @@ class Chat:
         cfg, auth = get_settings(), session['auth']
         if len(message) > cfg.agent['max_message_chars']:
             return {'reply': cfg.conversation['safe']['too_long'], 'citations': [], 'tools_called': []}
-        with log.span('PREPASS', 'extract and mask'):
-            parsed = extract(message)
+        parsed = extract(message)
         if not re.search(r'\w', message):
             return {'reply': cfg.conversation['safe']['empty'], 'citations': [], 'tools_called': []}
-        log.step('PREPASS', 'masked input', message=parsed.text, hits=[name for name in ('mobile', 'account', 'code', 'postal_pin') if getattr(parsed, name)])
+        log.step('PREPASS', 'input extracted', message=None if parsed.code and auth['state'] == 'AWAITING_OTP' else parsed.text, hits=[name for name in ('mobile', 'account', 'code', 'postal_pin') if getattr(parsed, name)])
         normalized = ' '.join(re.sub(r'[^\w\s]|_', '', message.lower()).split())
         for group, entry in cfg.conversation['smalltalk'].items():
             if normalized in entry['phrases']:
@@ -78,8 +79,6 @@ class Chat:
                 result = {'reply': entry['reply'], 'citations': [], 'tools_called': []}
                 self._history(session, parsed, result)
                 return result
-        if '[secret]' in parsed.text and auth['state'] != 'AWAITING_OTP' and not session.get('active_flow') and not any(word in parsed.command for word in cfg.conversation['personal']):
-            return {'reply': cfg.conversation['safe']['secret_only'], 'citations': [], 'tools_called': []}
         if any(word in parsed.command for word in cfg.conversation['safe']['forbidden_patterns']):
             return {'reply': cfg.conversation['safe']['forbidden'], 'citations': [], 'tools_called': []}
         # Customer files are owned by this session and can be parsed before login.
@@ -171,7 +170,7 @@ class Chat:
 
     def _history(self, session, parsed, result):
         cfg = get_settings()
-        # OTP/PIN payloads never become history, even after a failed verification attempt.
-        if not parsed.code and '[secret]' not in parsed.text:
+        # Verification codes stay out of model history; labelled credentials are already masked.
+        if not parsed.code:
             session['history'].extend([{'role': 'user', 'content': parsed.text}, {'role': 'assistant', 'content': mask_text(result['reply'])}])
             session['history'] = session['history'][-cfg.session['history_turns'] * 2:]

@@ -95,7 +95,7 @@ class MemoryStore:
                             [
                                 item
                                 for item in (get(row, key) or [])
-                                if not matches(item, value)
+                                if not (matches(item, value) if isinstance(value, dict) else item == value)
                             ],
                         )
             self.put(name, query, row)

@@ -195,6 +195,8 @@ def search_knowledge(
     log.step(
         "RAG",
         "hybrid search",
+        why='vector and regular text indexes provide complementary candidates; Python RRF merges them',
+        vector_index=cfg.database.vector_index,
         filters=filters,
         vector=len(vector_rows),
         keyword=len(keyword_rows),

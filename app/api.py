@@ -14,6 +14,7 @@ from app.ingest.models import utcnow
 from app.ingest.validation import InvalidFile
 from app.log import log, mask_payload
 from app.prepass import extract
+from app.usage import token_scope, response_tokens, meter
 
 
 class SessionBody(BaseModel):
@@ -42,8 +43,8 @@ class APIError(Exception):
 
 def error_response(exc):
     cfg = get_settings()
-    message = cfg.ui[exc.message_key].format(count=cfg.uploads['max_files_per_message'], size=cfg.uploads['max_mb'])
-    return JSONResponse({"error": exc.code, "message": message}, status_code=exc.status)
+    message = cfg.ui[exc.message_key].format(count=cfg.uploads['max_files_per_message'], size=cfg.uploads['max_mb'], minutes=cfg.session['idle_minutes'])
+    return JSONResponse({**({'code': exc.code} if exc.code == 'SESSION_EXPIRED' else {}), "error": exc.code, "message": message}, status_code=exc.status)
 
 
 class API:
@@ -58,19 +59,22 @@ class API:
         ]:
             self.router.add_api_route(path, endpoint, methods=[method])
 
-    def owned(self, request, session_id=None, client_id=None, *, file=False):
+    def owned(self, request, session_id=None, client_id=None, *, file=False, touch=False):
         cfg = get_settings().ui
         cookie = request.cookies.get(cfg["cookie_name"])
         if not cookie or session_id and cookie != session_id:
             raise APIError("not_found", "not_found", 404)
         session = self.store.one("sessions", {"session_id": cookie})
-        if not session or session["expires_at"] <= utcnow():
-            raise APIError("not_found", "not_found", 404)
+        if session and (session['expires_at'] <= utcnow() or utcnow() - session.get('last_active_at', utcnow()) >= timedelta(minutes=get_settings().session['idle_minutes'])):
+            self.uploads.expire_session(cookie)
+            session = None
+        if not session:
+            raise APIError('SESSION_EXPIRED', 'session_expired', 410)
         if not file:
             client = client_id or request.headers.get(cfg["client_header"]) or request.query_params.get("client_id")
             if client != session.get("client_id"):
                 raise APIError("second_tab", "second_tab", 409)
-            self.store.patch("sessions", {"session_id": cookie}, {"$set": {"client_seen_at": utcnow()}})
+            self.store.patch("sessions", {"session_id": cookie}, {"$set": {"last_seen": utcnow(), **({'last_active_at': utcnow()} if touch else {})}})
         return session
 
     def attachment(self, session_id, attachment_id):
@@ -80,6 +84,7 @@ class API:
             raise APIError("not_found", "not_found", 404) from None
 
     def snapshot(self, session):
+        meter.restore(session['session_id'], session.get('counters', {}).get('tokens', {}))
         documents = self.store.find("documents", {"owner_key": session["session_id"], "namespace": "user"})
         cards = {row["attachment"]["id"]: {**row["attachment"], "status": row["attachment"]["status"] if row["expires_at"] > utcnow() else get_settings().ui["expired"]} for row in documents}
         history = session.get("ui_history", [])
@@ -88,7 +93,7 @@ class API:
         auth = session["auth"]
         user = self.store.one("users", {"user_id": auth.get("user_id")}) if auth["state"] == "VERIFIED" else None
         limits = get_settings().uploads
-        return jsonable_encoder({"session_id": session["session_id"], "history": history, "attachments": list(cards.values()), "auth_state": auth["state"], "auth_name": user["full_name"].split()[0] if user else "", "options": self.chat.options(session), "flow_state": self.flow(session), "upload_limits": {"max_files": limits['max_files_per_message'], "max_mb": limits['max_mb'], "allowed_extensions": limits['allowed_extensions']}})
+        return jsonable_encoder({"tokens": response_tokens(session["session_id"]), "session_id": session["session_id"], "history": history, "attachments": list(cards.values()), "auth_state": auth["state"], "auth_name": user["full_name"].split()[0] if user else "", "options": self.chat.options(session), "flow_state": self.flow(session), "upload_limits": {"max_files": limits['max_files_per_message'], "max_mb": limits['max_mb'], "allowed_extensions": limits['allowed_extensions']}})
 
     @staticmethod
     def flow(session):
@@ -102,15 +107,18 @@ class API:
         if body.session_id and body.session_id != cookie:
             raise APIError("not_found", "not_found", 404)
         previous = self.store.one("sessions", {"session_id": cookie}) if cookie else None
+        if previous and (previous['expires_at'] <= now or now - previous.get('last_active_at', now) >= timedelta(minutes=get_settings().session['idle_minutes'])):
+            self.uploads.expire_session(cookie)
+            previous = None
         if body.new_chat and previous and previous.get("client_id") != body.client_id:
             raise APIError("second_tab", "second_tab", 409)
         sid = None if body.new_chat else cookie
         row = self.store.one("sessions", {"session_id": sid}) if sid else None
-        if row and row.get("client_id") and row.get("client_id") != body.client_id and row.get("client_seen_at", now) + timedelta(seconds=cfg["tab_idle_seconds"]) > now:
+        if row and row.get("client_id") and row.get("client_id") != body.client_id and row.get("last_seen", now) + timedelta(seconds=cfg["tab_idle_seconds"]) > now:
             raise APIError("second_tab", "second_tab", 409)
         session = self.chat.sessions.load(sid)
         # Claim atomically so simultaneous opening tabs cannot both become owners.
-        claimed = self.store.patch("sessions", {"session_id": session["session_id"], "$or": [{"client_id": {"$exists": False}}, {"client_id": body.client_id}, {"client_seen_at": {"$lte": now - timedelta(seconds=cfg["tab_idle_seconds"])}}]}, {"$set": {"client_id": body.client_id, "client_seen_at": now}})
+        claimed = self.store.patch("sessions", {"session_id": session["session_id"], "$or": [{"client_id": {"$exists": False}}, {"client_id": body.client_id}, {"last_seen": {"$lte": now - timedelta(seconds=cfg["tab_idle_seconds"])}}]}, {"$set": {"client_id": body.client_id, "last_seen": now}})
         if not claimed.modified_count and session.get("client_id") != body.client_id:
             raise APIError("second_tab", "second_tab", 409)
         response.set_cookie(cfg["cookie_name"], session["session_id"], httponly=True, samesite="strict", secure=request.url.scheme == "https", max_age=get_settings().session["expires_hours"] * 3600)
@@ -122,7 +130,11 @@ class API:
         return self.snapshot(self.chat.sessions.load(session["session_id"]))
 
     def turn(self, body: ChatBody, request: Request):
-        session = self.owned(request, body.session_id, body.client_id)
+        with token_scope(body.session_id or request.cookies.get(get_settings().ui['cookie_name']), self.store):
+            return self._metered_turn(body, request)
+
+    def _metered_turn(self, body, request):
+        session = self.owned(request, body.session_id, body.client_id, touch=True)
         self.chat.sessions.load(session['session_id'])
         try:
             with self.chat.sessions.lock(session['session_id']):
@@ -141,20 +153,28 @@ class API:
             raise APIError("processing", "processing", 409)
         cached = next((row for row in session.get("ui_history", []) if row.get("request_id") == body.request_id), None)
         if cached:
-            return cached["response"]
+            return {**cached["response"], 'tokens': response_tokens(session['session_id'])}
         message = body.message or (get_settings().ui["files_only"] if cards else "")
         result = self.chat.turn_locked(message, session_id=session["session_id"], attachments=body.attachment_ids)
         current = self.store.one("sessions", {"session_id": session["session_id"]})
+        if current is None:
+            raise APIError('SESSION_EXPIRED', 'session_expired', 410)
         state = self.snapshot(current)
-        response = {"reply_markdown": result["reply"], "citations": result.get("citations", []), "options": result.get("options", []), "auth_state": state["auth_state"], "auth_name": state["auth_name"], "flow_state": state["flow_state"], "attachments": state["attachments"], "notices": [], "tools_called": result.get("tools_called", [])}
+        response = {"tokens": response_tokens(session["session_id"]), "reply_markdown": result["reply"], "citations": result.get("citations", []), "options": result.get("options", []), "auth_state": state["auth_state"], "auth_name": state["auth_name"], "flow_state": state["flow_state"], "attachments": state["attachments"], "notices": [], "tools_called": result.get("tools_called", [])}
         record = {"id": uuid4().hex, "request_id": body.request_id, "message": extract(message).text, "attachments": cards, "response": mask_payload(response), "created_at": utcnow()}
         history = [*current.get("ui_history", []), record][-get_settings().ui["ui_history_turns"]:]
         self.store.patch("sessions", {"session_id": session["session_id"]}, {"$set": {"ui_history": history}})
         log.step("API", "response", chars=len(result["reply"]), tools=response["tools_called"], auth=response["auth_state"])
+        with log.span('RESPONSE', 'response', module=__name__, function='API.turn_locked', chars=len(result['reply'])):
+            pass
         return jsonable_encoder(response)
 
     async def upload(self, request: Request, file: UploadFile = File(...), session_id: str = Form(...), client_id: str = Form(...)):
-        self.owned(request, session_id, client_id)
+        with token_scope(session_id, self.store):
+            return await self._metered_upload(request, file, session_id, client_id)
+
+    async def _metered_upload(self, request, file, session_id, client_id):
+        self.owned(request, session_id, client_id, touch=True)
         cfg = get_settings()
         content = await file.read(cfg.uploads["max_mb"] * 1024 * 1024 + cfg.ui["upload_read_extra_bytes"])
         log.step("UPLOAD", "received", name=file.filename, bytes=len(content))
@@ -194,6 +214,6 @@ class API:
         return FileResponse(path, media_type=guess_type(card["name"])[0] or "application/octet-stream", filename=card["name"], content_disposition_type="inline" if inline else "attachment", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     def event(self, body: EventBody, request: Request):
-        self.owned(request, body.session_id)
+        self.owned(request, body.session_id, touch=True)
         log.step("UI", body.event[:get_settings().ui["event_chars"]], detail=body.detail)
         return {"ok": True}

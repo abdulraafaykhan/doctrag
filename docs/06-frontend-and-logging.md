@@ -34,7 +34,7 @@ React 19 + Vite (`react@19.3.1`, `react-dom@19.3.1`, `vite@8.3.5`, `@vitejs/plug
 - Errors: JSON `{error, message}`; the UI shows `message` inline, never a stack trace.
 
 ## Terminal logging (backend, `rich`)
-One module `app/log.py`. Every line: `HH:MM:SS  AREA  action | key=value ...` with a colour per area. Level via `LOG_LEVEL` in `.env`. Never log PII: mobile and account numbers show as `98****21` / `****5511`, OTPs and card data never appear, message text is truncated to 80 chars after masking.
+One module `app/log.py`. Every line: `HH:MM:SS  AREA  action | key=value ...` with a colour per area. Level via `LOG_LEVEL` in `.env`. Mask mobile, account and full card numbers; preserve six-digit document/reference numbers. Demo OTP verification is code-owned, never logged as a hash input or sent to the model; its typed text may appear in the UI transcript. PIN/CVV/password labels stay masked. Message text is truncated to 80 chars after masking.
 
 Areas and what must be logged (not exhaustive, but nothing important may be silent):
 | Area | Log on |

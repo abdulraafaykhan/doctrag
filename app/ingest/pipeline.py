@@ -13,7 +13,7 @@ from app.ingest.models import DocumentMeta, Element, digest, utcnow
 from app.ingest.parsers import parse_file
 from app.ingest.store import Store
 from app.ingest.validation import validate_file
-from app.llm import QuotaExceeded
+from app.llm import QuotaExceeded, FakeLLM
 from app.log import log
 
 
@@ -22,6 +22,10 @@ class Pipeline:
         self.store = store or Store()
         self.images = images or ImageCascade(self.store)
         self.embeddings = embeddings or Embeddings(self.store)
+
+    def save_job(self, document, job):
+        document['job'] = job
+        self.store.patch('documents', {'doc_id': document['doc_id']}, {'$set': {'job': job}})
 
     def ingest(
         self,
@@ -66,17 +70,17 @@ class Pipeline:
                     hours=cfg.uploads["expiry_hours"]
                 )
             self.store.put("documents", identity, document)
-        job_id = "job_" + document["doc_id"]
-        job = self.store.one("ingest_jobs", {"job_id": job_id}) or {
-            "job_id": job_id,
-            "doc_id": document["doc_id"],
+        job = document.get('job') or {
             "state": "queued",
             "stage": "parse",
             "cursor": 0,
             "attempts": 0,
+            "chunks_total": 0,
+            "chunks_done": 0,
+            "last_error": None,
         }
         job.update(state="running", attempts=job["attempts"] + 1, updated_at=utcnow())
-        self.store.put("ingest_jobs", {"job_id": job_id}, job)
+        self.save_job(document, job)
         checkpoint = ROOT / "data/ingest" / f"{document['doc_id']}.json"
         checkpoint.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -129,13 +133,15 @@ class Pipeline:
                         owner_key,
                         mode="online" if customer else "ingest",
                         budget=budget,
+                        doc_id=document['doc_id'], filename=document['filename'], page=element.page,
+                        bbox=element.bbox, namespace=document['namespace'],
                     )
                     if result.get("needs_retry"):
                         # Keep the parse checkpoint so a resume only retries failed crops.
                         document.update(processing_state="needs_retry", retry_after=utcnow() + timedelta(seconds=cfg.knowledge["images"]["retry_cooldown_seconds"]))
                         self.store.put("documents", identity, document)
                         job.update(state="needs_retry", stage="parse", updated_at=utcnow())
-                        self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                        self.save_job(document, job)
                         return document
                     ocr_pages += result["method"] != "decorative"
                     flags.extend(
@@ -151,6 +157,7 @@ class Pipeline:
                         "confidence": result["confidence"],
                         "needs_review": result["needs_review"],
                         "flags": result["flags"],
+                        "extraction_id": result.get('extraction_id'),
                     }
                     if structured and isinstance(structured.get("rows"), list):
                         resolved.append(
@@ -191,6 +198,9 @@ class Pipeline:
                 log.step('INGEST', 'stage', doc=document['doc_id'], stage='chunk')
                 with log.span('CHUNK', 'build chunks'):
                     sections, chunks = chunk_elements(resolved, document)
+                    for extraction_id in dict.fromkeys(row.get('extraction_id') for row in chunks if row.get('extraction_id')):
+                        extracted = self.store.one('extractions', {'extraction_id': extraction_id}) or {}
+                        log.step('CHUNK', 'extraction provenance', extraction=extraction_id, source=extracted.get('selected_source'), why=extracted.get('selected_reason', 'image cascade result'), flags=extracted.get('flags', []))
                 if customer:
                     session = (
                         self.store.one("sessions", {"session_id": owner_key}) or {}
@@ -247,16 +257,16 @@ class Pipeline:
                 job.update(
                     stage="embed", cursor=0, chunks_total=len(chunks), chunks_done=0
                 )
-                self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                self.save_job(document, job)
             if defer_embeddings:
                 job.update(state="queued", updated_at=utcnow())
-                self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                self.save_job(document, job)
                 return document
             self.embed_document(document["doc_id"])
             return self.store.one("documents", {"doc_id": document["doc_id"]})
         except QuotaExceeded:
             job.update(state="paused_quota", updated_at=utcnow())
-            self.store.put("ingest_jobs", {"job_id": job_id}, job)
+            self.save_job(document, job)
             log.step(
                 "INGEST", "paused quota", doc=document["doc_id"], stage=job["stage"]
             )
@@ -265,7 +275,7 @@ class Pipeline:
             job.update(
                 state="failed", last_error=type(exc).__name__, updated_at=utcnow()
             )
-            self.store.put("ingest_jobs", {"job_id": job_id}, job)
+            self.save_job(document, job)
             raise
 
     def embed_document(self, doc_id: str):
@@ -275,8 +285,7 @@ class Pipeline:
         if document.get("processing_state") == "needs_retry":
             log.step("INGEST", "image retry required before completing job", doc=doc_id)
             return
-        job_id = "job_" + doc_id
-        job = self.store.one("ingest_jobs", {"job_id": job_id})
+        job = document.get('job')
         missing = self.store.find(
             "chunks", {"doc_id": doc_id, "embedding": {"$exists": False}}
         )
@@ -291,7 +300,7 @@ class Pipeline:
                     self.store.patch(
                         "chunks",
                         {"chunk_id": row["chunk_id"]},
-                        {"$set": {"embedding": vector}},
+                        {"$set": {"embedding": vector, 'embedding_dims': len(vector), 'embedding_model': ('fake|' if isinstance(getattr(self.embeddings, 'llm', None), FakeLLM) else '') + get_settings().models.embed}},
                     )
                 if job:
                     job.update(
@@ -300,7 +309,7 @@ class Pipeline:
                         chunks_done=job.get("chunks_done", 0) + len(batch),
                         updated_at=utcnow(),
                     )
-                    self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                    self.save_job(document, job)
                 log.step(
                     "INGEST",
                     "embedding progress",
@@ -311,11 +320,11 @@ class Pipeline:
         except QuotaExceeded:
             if job:
                 job.update(state="paused_quota", updated_at=utcnow())
-                self.store.put("ingest_jobs", {"job_id": job_id}, job)
+                self.save_job(document, job)
             raise
         self.store.patch(
             "documents", {"doc_id": doc_id}, {"$set": {"embedding_state": "ready"}}
         )
         if job:
             job.update(state="done", stage="store", updated_at=utcnow())
-            self.store.put("ingest_jobs", {"job_id": job_id}, job)
+            self.save_job(document, job)

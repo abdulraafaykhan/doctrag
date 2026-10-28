@@ -16,8 +16,9 @@ from openai import OpenAI
 
 from app.config import ROOT, get_settings
 from app.ingest.models import digest
-from app.llm import QuotaGuard, _vision_fallback_error
-from app.log import log, mask_text, mask_payload
+from app.llm import QuotaGuard, _vision_fallback_error, record_usage
+from app.usage import meter, session_context
+from app.log import log, mask_text, mask_payload, traced
 from app.verify import check, canonical_citations
 
 
@@ -74,14 +75,16 @@ class LoggedTransport(httpx.BaseTransport):
                 raise ValueError('Unmasked identity in provider prompt')
         return body, payload
 
+    @traced('LLM', 'provider request')
     def handle_request(self, request):
         cfg = get_settings()
         body, payload = self.prepare(request)
         key = digest(payload + self.sample.encode() + str(cfg.conversation['agent']['cache_version']).encode())
-        path = ROOT / 'data/test_cache' / f'agent_{key}.json'
+        path = ROOT / 'data/test_cache' / f'agent_{digest(session_context.get() or "bank")}_{key}.json'
         if self.cache and path.exists():
             saved = json.loads(path.read_text(encoding='utf-8'))
             self.usage.append({**saved['usage'], 'cached': True, 'tool_proposals': self.proposals(saved['payload'])})
+            record_usage(model=body['model'], cached=True)
             return httpx.Response(200, json=saved['payload'], headers=saved.get('headers', {}))
         self.quota.reserve('llm')
         outbound = httpx.Request(request.method, request.url, headers=request.headers, content=payload, extensions=request.extensions)
@@ -96,7 +99,8 @@ class LoggedTransport(httpx.BaseTransport):
             result = response.json()
             usage = result.get('usage', {})
             self.usage.append({**usage, 'cached': False, 'model': body['model'], 'tpm': response.headers.get('x-ratelimit-limit-tokens'), 'tool_proposals': self.proposals(result)})
-            log.step('LLM', 'token usage', **usage)
+            counted = meter.add(session_context.get(), body['model'], 'llm', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
+            log.step('LLM', 'token usage', model=body['model'], **counted)
             if self.cache:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(json.dumps({'payload': result, 'usage': self.usage[-1], 'headers': {key: value for key, value in response.headers.items() if key.startswith('x-ratelimit-')}}), encoding='utf-8')
@@ -156,6 +160,7 @@ class Runner:
                 return result.get('text', '')
         return get_settings().conversation['safe']['tool_limit']
 
+    @traced('AGENT', 'native agent')
     def _native(self, model, messages, registry, *, repair=False):
         cfg = get_settings()
         client = None
@@ -173,7 +178,13 @@ class Runner:
             def guarded_call(*args, **kwargs):
                 (self.quota or QuotaGuard()).reserve('llm')
                 with log.span('LLM', 'CrewAI native Gemini request', model=model):
-                    return gemini_call(*args, **kwargs)
+                    from types import SimpleNamespace
+                    before = llm.get_token_usage_summary() or {}
+                    result = gemini_call(*args, **kwargs)
+                    after = llm.get_token_usage_summary() or {}
+                    delta = {key: after.get(key, 0) - before.get(key, 0) for key in ('prompt_tokens', 'completion_tokens')}
+                    record_usage(SimpleNamespace(usage=SimpleNamespace(**delta)), model)
+                    return result
             llm.call = guarded_call
         try:
             if repair:
@@ -200,9 +211,10 @@ class Runner:
             if client:
                 client.close()
 
+    @traced('AGENT', 'agent turn')
     def run(self, session, message, registry):
         cfg = get_settings()
-        log.step('AGENT', 'turn start', state=session['auth']['state'], tools=registry.visible())
+        log.step('AGENT', 'turn start', state=session['auth']['state'], tools=registry.visible(), why='tool visibility follows authentication and active flow state')
         history, used = [], 0
         for item in reversed(session.get('history', [])[-cfg.session['history_turns'] * 2:]):
             cost = len(item['content']) // cfg.chunking['chars_per_token']
@@ -234,12 +246,12 @@ class Runner:
         for display in displays:
             if display not in reply:
                 reply += '\n' + display
-        with log.span('VERIFY', 'number check'):
+        with log.span('VERIFY', 'number check', module=check.__module__, function=check.__qualname__):
             valid, errors = check(reply, registry.results)
-        log.step('VERIFY', 'number and citation check', passed=valid, errors=errors)
+        log.step('VERIFY', 'number and citation check', passed=valid, errors=errors, why='every number and citation must match tool evidence')
         if not valid:
             repair = cfg.prompts['repair'].replace('{{bad_numbers}}', json.dumps(errors)).replace('{{sources}}', json.dumps(registry.results, default=str))
-            log.step('VERIFY', 'repair required', errors=errors)
+            log.step('VERIFY', 'repair required', errors=errors, why='answer failed number or citation validation')
             if self.llm is not None:
                 reply = self.llm.chat([{'role': 'system', 'content': mask_text(repair)}])
             else:

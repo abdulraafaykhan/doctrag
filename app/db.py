@@ -82,6 +82,7 @@ def normal_indexes() -> dict[str, list[tuple[list[tuple[str, int]], dict]]]:
         "sections": [plain("doc_id"), ttl],
         "chunks": [
             plain("doc_id"),
+            plain('content_hash', 'embedding_model'),
             ttl,
             (
                 [("text", "text")],
@@ -90,10 +91,10 @@ def normal_indexes() -> dict[str, list[tuple[list[tuple[str, int]], dict]]]:
         ],
         "rate_rows": [plain("product", "lifecycle"), plain("table_id"), ttl],
         "rate_tables": [plain("doc_id"), ttl],
-        "ingest_jobs": [plain("doc_id")],
-        "embed_cache": [unique("key"), ttl],
-        "image_cache": [
-            ([("image_hash", ASCENDING), ("owner_key", ASCENDING)], {"unique": True}),
+        "extractions": [
+            ([("extraction_id", ASCENDING)], {'unique': True, 'sparse': True}),
+            plain('doc_id'),
+            plain('image_hash', 'owner_key'),
             ttl,
         ],
         "quota_usage": [unique("day")],

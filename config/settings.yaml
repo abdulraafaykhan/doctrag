@@ -35,10 +35,10 @@ auth:
   otp_max_attempts: 3
   otp_max_resends: 3
   lock_minutes: 10
-  session_idle_minutes: 15
   held_messages_max: 3
 
 session:
+  idle_minutes: 15
   lease_seconds: 600
   expires_hours: 24
   history_turns: 12
@@ -109,8 +109,6 @@ formats:
 
 retention:
   audit_log_days: 30
-  embed_cache_days: 7
-  embed_cache_max: 2000
   image_cache_hours: 24
 
 logging:

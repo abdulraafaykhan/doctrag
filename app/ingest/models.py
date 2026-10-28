@@ -28,6 +28,7 @@ class Element(BaseModel):
     confidence: float = Field(default=1.0, ge=0, le=1)
     needs_review: bool = False
     flags: list[str] = Field(default_factory=list)
+    extraction_id: str | None = None
 
 
 class DocumentMeta(BaseModel):

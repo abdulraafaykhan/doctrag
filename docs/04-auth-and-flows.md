@@ -14,7 +14,7 @@ Code owns state. The agent only fills slots and answers questions. Fast paths (O
 | AWAITING_OTP | exactly 6 digits | VERIFIED | in demo mode any 6 digits pass; set verified_at; replay held messages |
 | AWAITING_OTP | wrong format / expired | AWAITING_OTP | count attempt (max 3), offer resend (max 3) |
 | AWAITING_OTP | "cancel" | ANONYMOUS | clear held messages and candidates |
-| VERIFIED | 15 min idle | ANONYMOUS | clear identity |
+| Any session | session.idle_minutes without user action | SESSION_EXPIRED | delete session, auth, history, pending actions and all owned upload data; heartbeat does not extend activity |
 | VERIFIED | a different account number is given | AWAITING_OTP | full re-login, old data not shown |
 
 Rules:

@@ -5,7 +5,8 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from app.config import get_settings
-from app.ingest.models import digest
+from app.ingest.models import digest, utcnow
+from app.log import mask_text
 
 
 def tokens(text: str) -> int:
@@ -60,6 +61,7 @@ def chunk_elements(elements, document: dict):
         base["expires_at"] = document["expires_at"]
 
     def child(text, element, section_id, kind):
+        text = mask_text(text)
         chunks.append(
             {
                 **base,
@@ -67,13 +69,20 @@ def chunk_elements(elements, document: dict):
                 + digest(f"{document['doc_id']}|{len(chunks)}|{text}")[:24],
                 "section_id": section_id,
                 "kind": kind,
+                "filename": document.get('filename', document['title']),
+                "doc_title": document['title'],
+                "created_at": utcnow(),
+                "expires_at": document.get('expires_at'),
+                "embedding_model": get_settings().models.embed,
+                "embedding_dims": get_settings().models.embed_dims,
+                "extraction_id": element.extraction_id,
                 "text": text,
                 "token_count": tokens(text),
                 "content_hash": digest(text),
                 "section_path": element.section,
                 "page": element.page,
                 "bbox": element.bbox,
-                "source_method": element.source_method,
+                "source_method": element.source_method if element.source_method in {'ocr', 'vlm'} else 'text_layer',
                 "confidence": element.confidence,
                 "needs_review": element.needs_review,
                 "review_flags": element.flags,

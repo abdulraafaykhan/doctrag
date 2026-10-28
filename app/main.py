@@ -13,6 +13,7 @@ from app.config import ROOT, get_settings
 from app.db import close_db, index_status, ping
 from app.llm import QuotaGuard
 from app.log import log
+from app.usage import shutdown_tokens
 
 
 def health_checks() -> dict:
@@ -55,13 +56,14 @@ async def lifespan(app: FastAPI):
         finally:
             worker.stop()
     finally:
+        shutdown_tokens()
         close_db()
 
 
 async def request_logging(request, call_next):
     if request.method == 'POST' and request.url.path in {'/api/chat', '/api/upload'}:
         # A mutable context value carries timing from threadpool endpoints to middleware.
-        with log.request('chat' if request.url.path == '/api/chat' else 'upload'):
+        with log.request(request.url.path):
             return await call_next(request)
     response = await call_next(request)
     log.step('API', 'heartbeat' if request.url.path == '/api/session' and request.method == 'GET' else 'request',
@@ -90,7 +92,13 @@ def create_app(*, chat=None, uploads=None, checks=True):
     from app.chat import Chat
     from app.uploads import UploadService
 
-    instance = FastAPI(title=get_settings().bank["name"], lifespan=lifespan if checks else None, docs_url=None, redoc_url=None, openapi_url=None)
+    @asynccontextmanager
+    async def offline_lifespan(app):
+        try:
+            yield
+        finally:
+            shutdown_tokens()
+    instance = FastAPI(title=get_settings().bank["name"], lifespan=lifespan if checks else offline_lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     service = chat or Chat()
     instance.state.api = API(service, uploads or UploadService(service.store))
     instance.middleware("http")(request_logging)

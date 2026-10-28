@@ -191,7 +191,7 @@ def test_G_visibility_identity_schema_and_no_submit(store, verified):
 def test_G7_G13_secrets(value):
     safe = extract(value).text
     assert not re_search_identity(safe)
-    assert all(secret not in safe for secret in ['654321', '987654', 'CVV 123'])
+    assert all(secret not in safe for secret in ['987654', 'CVV 123'])
 
 
 def re_search_identity(text):
@@ -280,7 +280,7 @@ def test_retryable_image_never_marks_ingest_done(store, tmp_path):
             return {'needs_retry': True}
     result = Pipeline(store, images=Pending()).ingest(path, DocumentMeta(title='retry'), defer_embeddings=True)
     assert result['processing_state'] == 'needs_retry'
-    assert store.one('ingest_jobs', {'doc_id': result['doc_id']})['state'] == 'needs_retry'
+    assert store.one('documents', {'doc_id': result['doc_id']})['job']['state'] == 'needs_retry'
 
 
 def test_cutoff_table_keeps_only_validated_rows(store):
@@ -408,12 +408,12 @@ def test_history_is_bounded_before_model(store, verified):
     assert 'bank information' not in llm.calls[0]['messages'][1]['content']
 
 
-def test_secret_only_message_skips_model_and_history(store, verified):
-    llm = FakeLLM()
+def test_demo_number_is_kept_but_pin_stays_masked(store, verified):
+    llm = FakeLLM(['Please ask a banking question.'])
     result = Chat(store, llm=llm).turn('my OTP is 654321 and PIN is 987654', session_id=verified['session_id'])
-    assert not llm.calls and not result['tools_called']
+    assert llm.calls and not result['tools_called']
     saved = store.one('sessions', {'session_id': verified['session_id']})
-    assert '654321' not in json.dumps(saved, default=str) and '987654' not in json.dumps(saved, default=str)
+    assert '654321' in json.dumps(saved, default=str) and '987654' not in json.dumps(saved, default=str)
 
 
 def test_change_button_then_slot_is_code_only(store, verified):

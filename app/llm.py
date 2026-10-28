@@ -17,8 +17,20 @@ from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_fixe
 
 from app.config import get_settings
 from app.db import collection
-from app.log import log, mask_text
+from app.log import log, mask_text, mask_payload
 from app.vision import parse_vision_json, postprocess_vision
+from app.usage import meter, session_context
+
+
+def record_usage(result=None, model='scripted', kind='llm', *, cached=False):
+    usage = getattr(result, 'usage', None) or getattr(result, 'usage_metadata', None)
+    incoming = getattr(usage, 'prompt_tokens', None) or getattr(usage, 'prompt_token_count', 0)
+    outgoing = getattr(usage, 'completion_tokens', None)
+    if outgoing is None:
+        outgoing = (getattr(usage, 'candidates_token_count', 0) or 0) + (getattr(usage, 'thoughts_token_count', 0) or 0)
+    counted = meter.add(session_context.get(), model, kind, incoming, outgoing, cached=cached)
+    log.step('VLM' if kind == 'vlm' else 'LLM', 'token usage', model=model, **counted)
+    return counted
 
 
 class QuotaExceeded(RuntimeError):
@@ -237,13 +249,7 @@ class LLMClient:
                 temperature=self.settings.models.temperature,
                 timeout=self.settings.llm.timeout_seconds,
             )
-            if result.usage:
-                log.step(
-                    "LLM",
-                    "usage",
-                    input_tokens=result.usage.prompt_tokens,
-                    output_tokens=result.usage.completion_tokens,
-                )
+            self._usage(result, model, 'llm')
             return result.choices[0].message.content or ""
         if provider != "gemini":
             raise ValueError("Unsupported configured chat provider")
@@ -267,18 +273,11 @@ class LLMClient:
                 temperature=self.settings.models.temperature,
             ),
         )
-        self._usage(result)
+        self._usage(result, model, 'llm')
         return result.text or ""
 
-    def _usage(self, result) -> None:
-        usage = getattr(result, "usage_metadata", None)
-        if usage:
-            log.step(
-                "LLM",
-                "usage",
-                input_tokens=usage.prompt_token_count,
-                output_tokens=usage.candidates_token_count,
-            )
+    def _usage(self, result, model='scripted', kind='llm') -> None:
+        record_usage(result, model, kind)
 
     def vision(
         self,
@@ -352,6 +351,9 @@ class LLMClient:
                     )
                     return {
                         "text": json.dumps(processed, ensure_ascii=False),
+                        "raw_text": mask_text(text),
+                        "raw_structured": mask_payload(parsed),
+                        "model": model,
                         "structured": processed,
                         "status": "readable",
                         "confidence": "model",
@@ -407,13 +409,7 @@ class LLMClient:
                 timeout=timeout,
                 response_format={"type": "json_object"},
             )
-            if result.usage:
-                log.step(
-                    "VLM",
-                    "usage",
-                    input_tokens=result.usage.prompt_tokens,
-                    output_tokens=result.usage.completion_tokens,
-                )
+            self._usage(result, model, 'vlm')
             return result.choices[0].message.content or ""
         result = self._gemini.models.generate_content(
             model=model.removeprefix("gemini/"),
@@ -423,7 +419,7 @@ class LLMClient:
                 response_mime_type="application/json",
             ),
         )
-        self._usage(result)
+        self._usage(result, model, 'vlm')
         return result.text or ""
 
     def embed(
@@ -474,6 +470,7 @@ class FakeLLM:
         self.calls: list[dict] = []
 
     def chat(self, messages, purpose="answer") -> str | dict:
+        record_usage(cached=True)
         self.calls.append(
             {
                 "purpose": purpose,
@@ -498,6 +495,7 @@ class FakeLLM:
         local_ocr="",
         cut_off_rows=(),
     ) -> dict:
+        record_usage(kind='vlm', cached=True)
         if not pii_redacted:
             raise ValueError(
                 "Vision images must be locally redacted before any model call"
@@ -509,8 +507,9 @@ class FakeLLM:
         )
         for _ in range(get_settings().llm.vision_json_retries + 1):
             try:
+                parsed = parse_vision_json(next(self.replies, ""))
                 structured = postprocess_vision(
-                    parse_vision_json(next(self.replies, "")),
+                    parsed,
                     local_ocr,
                     cut_off_rows=cut_off_rows,
                 )
@@ -518,6 +517,9 @@ class FakeLLM:
                 continue
             return {
                 "text": json.dumps(structured, ensure_ascii=False),
+                "raw_text": json.dumps(mask_payload(parsed), ensure_ascii=False),
+                "raw_structured": mask_payload(parsed),
+                "model": 'scripted',
                 "structured": structured,
                 "status": "readable",
                 "confidence": "fake",

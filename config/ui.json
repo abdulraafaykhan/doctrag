@@ -1,4 +1,7 @@
 {
+  "tokens": "Tokens: in {in} · out {out} · total {total}",
+  "session_expired": "Chat ended after {minutes} minutes of inactivity. Started a new chat.",
+  "queued": "Queued",
   "title": "Harbourline Bank", "new_chat": "New chat", "not_verified": "Not verified", "verified": "Verified as {name}",
   "placeholder": "Ask a bank question or attach a document…", "send": "Send", "attach": "Attach", "remove": "Remove", "retry": "Retry", "close": "Close preview",
   "thinking": "Thinking…", "reading_image": "Reading your image…", "processing": "Processing your document…", "sources": "Sources", "welcome": "How can we help? Ask about accounts, rates or bank documents.",

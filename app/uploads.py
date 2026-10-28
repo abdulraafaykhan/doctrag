@@ -1,6 +1,7 @@
 """Owning-session file access, one ingestion worker and TTL cleanup."""
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from mimetypes import guess_type
@@ -15,6 +16,7 @@ from app.ingest.store import Store
 from app.ingest.validation import InvalidFile, validate_file
 from app.llm import QuotaExceeded
 from app.log import log, request_context
+from app.usage import token_scope
 
 
 class UploadService:
@@ -87,7 +89,7 @@ class UploadService:
         self.store.patch(
             "sessions",
             {"session_id": owner_key},
-            {"$addToSet": {"attachments": attachment}},
+            {"$addToSet": {"attachments": attachment, 'uploads': doc['doc_id']}},
         )
         log.step("UPLOAD", "accepted", attachment=attachment["id"], size=len(content))
         return attachment
@@ -180,12 +182,12 @@ class UploadService:
         doc_id, owner = document["doc_id"], document["owner_key"]
         if owner == "bank":
             raise ValueError("Bank documents are not customer uploads")
-        for name in ("chunks", "sections", "rate_rows", "rate_tables", "ingest_jobs"):
+        for name in ("chunks", "sections", "rate_rows", "rate_tables", "extractions"):
             removed = self.store.delete(
                 name,
                 {
                     "doc_id": doc_id,
-                    **({"owner_key": owner} if name != "ingest_jobs" else {}),
+                    "owner_key": owner,
                 },
             )
             counts[name] = counts.get(name, 0) + removed
@@ -193,7 +195,7 @@ class UploadService:
         if path.is_relative_to((ROOT / "data/uploads" / digest(owner)).resolve()):
             path.unlink(missing_ok=True)
         (ROOT / "data/ingest" / f"{doc_id}.json").unlink(missing_ok=True)
-        for name, query in [('documents', {'doc_id': doc_id, 'owner_key': owner}), ('image_cache', {'owner_key': owner})]:
+        for name, query in [('documents', {'doc_id': doc_id, 'owner_key': owner})]:
             counts[name] = counts.get(name, 0) + self.store.delete(name, query)
         for cached in (ROOT / "data/test_cache").glob(f"vision_{digest(owner)}_*.json"):
             cached.unlink(missing_ok=True)
@@ -202,7 +204,8 @@ class UploadService:
             {"session_id": owner},
             {
                 "$pull": {
-                    "attachments": {"id": document.get("attachment", {}).get("id")}
+                    "attachments": {"id": document.get("attachment", {}).get("id")},
+                    'uploads': doc_id,
                 }
             },
         )
@@ -222,17 +225,20 @@ class UploadService:
 
     def cleanup(self):
         now = utcnow()
+        from datetime import timedelta
+        counts = {}
+        idle = now - timedelta(minutes=get_settings().session['idle_minutes'])
+        for session in self.store.find('sessions', {'last_active_at': {'$lte': idle}}):
+            for name, removed in self.expire_session(session['session_id'], log_result=False).items():
+                counts[name] = counts.get(name, 0) + removed
         expired = self.store.find(
             "documents", {"namespace": "user", "expires_at": {"$lte": now}}
         )
-        counts = {}
         for document in expired:
             self._delete_document(document, counts)
         # TTL may delete document records first; dependent collections expire independently.
-        for name in ('chunks', 'sections', 'rate_rows', 'rate_tables', 'image_cache', 'embed_cache'):
+        for name in ('chunks', 'sections', 'rate_rows', 'rate_tables', 'extractions'):
             counts[name] = counts.get(name, 0) + self.store.delete(name, {'expires_at': {'$lte': now}})
-        if any(counts.values()):
-            log.step('CLEANUP', 'expired rows deleted', **{name: count for name, count in counts.items() if count})
         from datetime import timedelta
 
         cutoff = (
@@ -247,6 +253,7 @@ class UploadService:
                     and not self.store.one("documents", {"storage_path": str(path)})
                 ):
                     path.unlink()
+                    counts['upload_files'] = counts.get('upload_files', 0) + 1
         # Checkpoints contain raw uploads too, including when MongoDB TTL ran first.
         for checkpoint in (ROOT / "data/ingest").glob("*.json"):
             saved = json.loads(checkpoint.read_text(encoding="utf-8"))
@@ -255,13 +262,43 @@ class UploadService:
                 and datetime.fromisoformat(saved["expires_at"]) <= now
             ):
                 checkpoint.unlink(missing_ok=True)
+                counts['checkpoints'] = counts.get('checkpoints', 0) + 1
         for cached in (ROOT / "data/test_cache").glob("vision_*.json"):
             if (
                 not cached.name.startswith(f"vision_{digest('bank')}_")
                 and cached.stat().st_mtime <= cutoff
             ):
                 cached.unlink(missing_ok=True)
+                counts['cache_files'] = counts.get('cache_files', 0) + 1
+        if any(counts.values()):
+            log.step('CLEANUP', 'expired session content deleted', why='idle deadline or upload retention reached', **{name: count for name, count in counts.items() if count})
         return len(expired)
+
+    def expire_session(self, owner, *, log_result=True):
+        """Delete owner-scoped content, retaining only audit and process accounting."""
+        if not owner or owner == 'bank':
+            raise ValueError('A customer session is required')
+        counts = {}
+        documents = self.store.find('documents', {'owner_key': owner})
+        for document in documents:
+            (ROOT / 'data/ingest' / f"{document['doc_id']}.json").unlink(missing_ok=True)
+        for name in ('documents', 'sections', 'chunks', 'rate_tables', 'rate_rows', 'extractions'):
+            counts[name] = self.store.delete(name, {'owner_key': owner})
+        for name in ('pending_actions', 'sessions'):
+            counts[name] = self.store.delete(name, {'session_id': owner})
+        for directory in ('uploads', 'crops'):
+            root = (ROOT / 'data' / directory).resolve()
+            folder = (root / digest(owner)).resolve()
+            if folder.is_relative_to(root) and folder != root and folder.exists():
+                counts[directory + '_files'] = sum(path.is_file() for path in folder.rglob('*'))
+                shutil.rmtree(folder)
+        for prefix in ('vision', 'agent'):
+            for path in (ROOT / 'data/test_cache').glob(f'{prefix}_{digest(owner)}_*.json'):
+                path.unlink(missing_ok=True)
+                counts['cache_files'] = counts.get('cache_files', 0) + 1
+        if log_result and any(counts.values()):
+            log.step('CLEANUP', 'idle session deleted', session=owner[:8], why='no user action within session.idle_minutes', **{key: value for key, value in counts.items() if value})
+        return counts
 
 
 class UploadWorker:
@@ -301,7 +338,7 @@ class UploadWorker:
                 ):
                     if self.stop_event.is_set():
                         break
-                    with log.request('upload', document.get('request_id')):
+                    with token_scope(document['owner_key'], self.service.store), log.request('upload', document.get('request_id')):
                         log.step('INGEST', 'job picked up', doc=document['doc_id'], stage=document['processing_state'])
                         self.service.process(document['owner_key'], document['attachment']['id'])
             except Exception as exc:

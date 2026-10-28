@@ -31,10 +31,12 @@ class Embeddings:
             key = f"{cfg.models.embed}|{cfg.models.embed_dims}|{'query' if query else 'document'}|{digest(safe)}"
             if isinstance(self.llm, FakeLLM):
                 key = "fake|" + key
-            cached = self.store.one("embed_cache", {"key": key})
+            model = ('fake|' if isinstance(self.llm, FakeLLM) else '') + cfg.models.embed
+            cached = self.store.one('chunks', {'content_hash': digest(safe), 'embedding_model': model, 'embedding': {'$exists': True}}) if not query else None
             disk = ROOT / "data/test_cache" / f"embedding_{digest(key)}.json"
-            if cached and cached.get("expires_at", utcnow()) > utcnow():
+            if cached and (not cached.get('expires_at') or cached['expires_at'] > utcnow()):
                 vector = cached["embedding"]
+                log.step('EMBED', 'chunk vector reused', why='same content hash and embedding model')
             elif disk.exists():
                 vector = json.loads(disk.read_text())
             else:
@@ -86,24 +88,4 @@ class Embeddings:
         finally:
             if self.llm is None and llm is not None:
                 llm.close()
-        for key, old in results:
-            vector = old if old is not None else new[key]
-            self.store.put(
-                "embed_cache",
-                {"key": key},
-                {
-                    "key": key,
-                    "embedding": vector,
-                    "created_at": utcnow(),
-                    "expires_at": utcnow()
-                    + timedelta(days=cfg.retention["embed_cache_days"]),
-                },
-            )
-        cap = cfg.retention["embed_cache_max"]
-        excess = self.store.count("embed_cache", {}) - cap
-        if excess > 0:
-            for value in self.store.find(
-                "embed_cache", {}, sort=[("created_at", 1)], limit=excess
-            ):
-                self.store.delete("embed_cache", {"key": value["key"]})
         return [old if old is not None else new[key] for key, old in results]
