@@ -1,6 +1,7 @@
 """Typed, audited tools with code-enforced visibility and call budgets."""
 
 import json
+import re
 from datetime import date, timedelta
 from typing import Any, Callable, Literal
 from uuid import uuid4
@@ -161,13 +162,16 @@ class BoundTool(BaseTool):
 
 
 class Registry:
-    def __init__(self, session, store, *, embeddings=None):
+    def __init__(self, session, store, *, embeddings=None, customer_message='', attachment_ids=()):
         self.session, self.store, self.embeddings = session, store, embeddings
         self.flows, self.sessions = Flows(store), Sessions(store)
         self.calls, self.results = 0, []
         self.invalid, self.source_count = {}, 0
         self.display_step, self.display_start = [], 0
         self.tools = self._build()
+        self.customer_message, self.attachment_ids = customer_message, tuple(attachment_ids)
+        self._has_uploads = None
+        self._private_search_logged = False
 
     def direct_display(self, outputs):
         allowed = get_settings().conversation['display_tools']
@@ -179,14 +183,36 @@ class Registry:
     def visible(self):
         public = ['search_bank_knowledge', 'search_my_documents', 'list_my_documents', 'delete_my_documents', 'lookup_rate', 'emi_calculator', 'start_authentication', 'escalate_to_human']
         if self.session['auth']['state'] != 'VERIFIED':
-            return public
+            return self._model_tools(public)
         active = self.session.get('active_flow')
         if not active:
-            return [name for name in public if name != 'start_authentication'] + ['get_balance', 'get_statement', 'get_card_info', 'chequebook_set_slots', 'debit_card_set_slots']
+            return self._model_tools([name for name in public if name != 'start_authentication'] + ['get_balance', 'get_statement', 'get_card_info', 'chequebook_set_slots', 'debit_card_set_slots'])
         names = ['search_bank_knowledge', 'search_my_documents', 'flow_status', 'flow_cancel', active['flow'] + '_set_slots', 'escalate_to_human']
         if active['status'] == 'COLLECTING':
             names += ['emi_calculator', 'lookup_rate', 'flow_summary']
+        return self._model_tools(names)
+
+    def _model_tools(self, names):
+        cfg = get_settings()
+        if cfg.models.agent.startswith('local/'):
+            names = [name for name in names if name in cfg.local_llm['enabled_tools']]
+            if self.references_upload():
+                names = [name for name in names if name != 'search_bank_knowledge']
+                if not self._private_search_logged:
+                    log.step('AGENT', 'app.tools.registry.Registry._model_tools', why='current attachment or reference to a session upload; only private document search allowed')
+                    self._private_search_logged = True
+            return names
         return names
+
+    def references_upload(self):
+        if self.attachment_ids:
+            return True
+        words = set(re.findall(r'\w+', self.customer_message.casefold()))
+        if not words.intersection(get_settings().local_llm['document_reference_words']):
+            return False
+        if self._has_uploads is None:
+            self._has_uploads = bool(self.session.get('uploads') or self.session.get('attachments') or self.store.one('documents', {'owner_key': self.session['session_id'], 'namespace': 'user', 'expires_at': {'$gt': utcnow()}}))
+        return self._has_uploads
 
     def _build(self):
         definitions = {

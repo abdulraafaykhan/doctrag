@@ -45,7 +45,8 @@ AREAS = dict(
         ),
     )
 )
-_NUMBER = re.compile(r"(?<!\w)(?:\+91[ -]*)?(?:\d[ -]?){9,18}\d(?!\w)")
+_NUMBER = re.compile(r"(?<![\w.])(?<!\d[ -])(?:\+91[ -]*)?(?:\d[ -]?){9,11}\d(?!\w|\.\d|[ -]?\d)")
+_CARD = re.compile(r"(?<![\w.])(?<!\d[ -])(?:\d{13,19}|(?:\d{4}[ -]?){3,4}\d{1,4})(?!\w|\.[A-Za-z\d]|[ -]?\d)")
 _SENSITIVE = re.compile(
     r"^(?:pin|cvv|password|secret|.*api.?key|mongodb.?uri|token|pending_token|code_hash|otp_hash|authorization|card.?number)$",
     re.I,
@@ -60,6 +61,21 @@ def mask_mobile(value: str) -> str:
 def mask_account(value: str) -> str:
     digits = re.sub(r"\D", "", value)
     return "****" + digits[-4:] if len(digits) == 12 else "[ACCOUNT]"
+
+
+def valid_card(value: str) -> bool:
+    digits = re.sub(r'\D', '', value)
+    if not 13 <= len(digits) <= 19:
+        return False
+    total = 0
+    for index, char in enumerate(reversed(digits)):
+        digit = int(char)
+        if index % 2:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+    return total % 10 == 0
 
 
 def mask_text(value: str) -> str:
@@ -78,7 +94,7 @@ def mask_text(value: str) -> str:
             return mask_mobile(digits)
         if len(digits) == 12:
             return mask_account(digits)
-        return "[CARD]" if 13 <= len(digits) <= 19 else raw
+        return raw
 
     value = re.sub(r"mongodb(?:\+srv)?://[^\s]+", "[DATABASE_URI]", value)
     value = re.sub(r"\b(?:gsk_|AIza)[\w-]+", "[API_KEY]", value)
@@ -92,6 +108,7 @@ def mask_text(value: str) -> str:
         r"\1 [REDACTED]",
         value,
     )
+    value = _CARD.sub(lambda match: '[CARD]' if valid_card(match.group()) else match.group(), value)
     return _NUMBER.sub(replace, value)
 
 
@@ -269,7 +286,7 @@ class AppLog:
             yield entry['attributes']
         except Exception as exc:
             entry['status'] = 'error'
-            entry['attributes'].update(error=type(exc).__name__, reason='operation failed; see exception type')
+            entry['attributes'].update(error=type(exc).__name__, reason=mask_text(str(exc)))
             raise
         finally:
             entry['duration_ms'] = round((perf_counter() - started) * 1000, 3)

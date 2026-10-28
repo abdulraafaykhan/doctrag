@@ -133,6 +133,8 @@ def system_prompt(session, registry):
     prompt = cfg.prompts['agent_system']
     for key, value in {'bank_name': cfg.bank['name'], 'today': date.today().isoformat(), 'auth_block': auth_block, 'flow_block': flow_block, 'docs_block': docs_block}.items():
         prompt = prompt.replace('{{' + key + '}}', str(value))
+    if cfg.models.agent.startswith('local/'):
+        prompt += '\n' + cfg.local_llm['scope_instruction']
     return mask_text(prompt)
 
 
@@ -143,6 +145,7 @@ class Runner:
 
     def _fake(self, messages, registry, *, llm=None):
         client = llm or self.llm
+        seen = set()
         for _ in range(get_settings().agent['max_steps']):
             with log.span('LLM', 'scripted request' if llm is None else 'local tool turn', model=getattr(client, 'model', 'scripted')):
                 result = client.chat(messages)
@@ -152,10 +155,20 @@ class Runner:
             if llm is not None:
                 messages.append({'role': 'assistant', 'content': json.dumps(result)})
             for call in result.get('tool_calls', []):
+                if llm is not None:
+                    key = (call['name'], json.dumps(call.get('arguments', {}), sort_keys=True))
+                    if key in seen:
+                        log.step('AGENT', 'repeated tool stopped', model=client.model, why='same tool and arguments already executed; final reply without tools')
+                        return client.chat(messages, no_tools=True)
+                    seen.add(key)
                 tool = registry.tools.get(call['name'])
                 output = tool.invoke(call.get('arguments', {})) if tool and call['name'] in registry.visible() else {'ok': False, 'code': 'NOT_VERIFIED'}
                 outputs.append((call['name'], output))
                 messages.append({'role': 'tool', 'content': json.dumps(output)})
+                if llm is not None:
+                    messages.append({'role': 'system', 'content': get_settings().local_llm['tool_result_instruction']})
+                    if call['name'] in get_settings().local_llm['direct_display_tools'] and output.get('ok') and output.get('display'):
+                        return output['display']
             display = registry.direct_display(outputs)
             if display:
                 return display
@@ -169,7 +182,8 @@ class Runner:
         if model.startswith('local/'):
             from app.local_llm import LocalClient
             local = LocalClient(registry, model=model, usage=self.usage)
-            return local.chat(messages, plain=True) if repair else self._fake(list(messages), registry, llm=local)
+            with log.span('AGENT', 'local agent', model=model):
+                return local.chat(messages, plain=True) if repair else self._fake(list(messages), registry, llm=local)
         client = None
         if model.startswith('groq/'):
             transport = LoggedTransport(self.quota or QuotaGuard(), self.usage, cache=self.cache, sample=self.sample, schemas={tool.name: tool.args_schema.model_json_schema() for tool in registry.list()}, validators={tool.name: tool.args_schema for tool in registry.list()})
@@ -219,34 +233,63 @@ class Runner:
                 client.close()
 
     @traced('AGENT', 'agent turn')
-    def run(self, session, message, registry):
+    def run(self, session, message, registry, *, code_route=None):
         cfg = get_settings()
+        local_mode = cfg.models.agent.startswith('local/')
         log.step('AGENT', 'turn start', state=session['auth']['state'], tools=registry.visible(), why='tool visibility follows authentication and active flow state')
         history, used = [], 0
         for item in reversed(session.get('history', [])[-cfg.session['history_turns'] * 2:]):
             cost = len(item['content']) // cfg.chunking['chars_per_token']
-            if used + cost > cfg.conversation['agent']['history_token_budget']:
+            if used + cost > (cfg.local_llm['history_token_budget'] if local_mode else cfg.conversation['agent']['history_token_budget']):
                 break
             history.insert(0, item)
             used += cost
         task = cfg.conversation['agent']['task'].format(history=history, message=message)
         messages = [{'role': 'system', 'content': system_prompt(session, registry)}, {'role': 'user', 'content': mask_text(task)}]
+        if local_mode:
+            task = cfg.conversation['agent']['task'].format(history=[], message=message)
+            messages = [messages[0], *[{**item, 'history': True} for item in history], {'role': 'user', 'content': mask_text(task)}]
         reply = None
-        if self.llm is not None:
+        if local_mode and code_route:
+            output = registry.tools[code_route].invoke({} if code_route == 'get_balance' else {'query': message})
+            log.path('rag-code-routed', reason='code selected ' + code_route + '; local model writes only; visibility and tool validation still apply')
+            if output.get('data', {}).get('no_good_match'):
+                log.step('AGENT', 'writer skipped', path='rag-code-routed', why='search returned no good match; no model call')
+                return {'reply': cfg.messages['answers']['not_found'], 'citations': [], 'usage': self.usage}
+            if not output.get('ok'):
+                return {'reply': output.get('display') or cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
+            if code_route == 'get_balance':
+                reply = output['display']
+            elif not output.get('data', {}).get('items'):
+                log.step('AGENT', 'writer skipped', path='rag-code-routed', why='search returned no good match; no model call')
+                return {'reply': cfg.messages['answers']['not_found'], 'citations': [], 'usage': self.usage}
+            else:
+                from app.local_llm import LocalClient
+                # Keep source envelopes intact until the shared local budget trimmer renders them.
+                messages.insert(-1, {'role': 'tool', 'content': json.dumps(output, default=str)})
+                try:
+                    reply = LocalClient(registry, model=self.model or cfg.models.agent, usage=self.usage).write(messages)
+                    log.step('LLM', 'model answered', model=self.model or cfg.models.agent, path='rag-code-routed', why='one plain-text answer from retrieved sources')
+                except Exception as exc:
+                    self._provider_error(self.model or cfg.models.agent, exc)
+                    return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
+        elif self.llm is not None:
             reply = self._fake(messages, registry)
             log.step('LLM', 'model answered', model='scripted')
         else:
-            for model in ([self.model] if self.model else [cfg.models.agent, *cfg.models.agent_fallbacks]):
+            chain = [self.model] if self.model else [cfg.models.agent, *cfg.models.agent_fallbacks]
+            for position, model in enumerate(chain):
                 try:
                     reply = self._native(model, messages, registry)
                     log.step('LLM', 'model answered', model=model)
                     break
                 except Exception as exc:
-                    log.step('AGENT', 'provider failed', model=model, error=type(exc).__name__)
+                    self._provider_error(model, exc)
                     from app.local_llm import LocalLLMError
                     if not isinstance(exc, LocalLLMError) and not _vision_fallback_error(exc):
                         break
-                    log.step('AGENT', 'fallback switch', model=model)
+                    if position + 1 < len(chain):
+                        log.step('AGENT', 'fallback switch', model=model, next_model=chain[position + 1])
         if reply is None:
             return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
         reply = canonical_citations(reply)
@@ -266,7 +309,10 @@ class Runner:
                 # Reuse the guarded native adapter, never an unmetered repair call.
                 try:
                     reply = self._native(self.model or cfg.models.agent, [{'role': 'system', 'content': messages[0]['content']}, {'role': 'user', 'content': mask_text(repair)}], registry, repair=True)
-                except Exception:
+                except Exception as exc:
+                    self._provider_error(self.model or cfg.models.agent, exc)
+                    if local_mode and not cfg.models.agent_fallbacks:
+                        return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
                     reply = ''
             if not isinstance(reply, str) or not check(reply, registry.results)[0] or not reply:
                 reply = cfg.messages['answers']['unverified_number']
@@ -274,3 +320,7 @@ class Runner:
         citations = [item for _, result in registry.results for item in result.get('data', {}).get('items', [])]
         log.step('AGENT', 'final response', chars=len(reply), calls=len(registry.results))
         return {'reply': mask_text(reply), 'citations': citations, 'usage': self.usage}
+
+    @staticmethod
+    def _provider_error(model, exc):
+        log.step('AGENT', 'error', model=model, error=type(exc.__cause__ or exc).__name__, http_status=getattr(exc, 'http_status', None), reason=getattr(exc, 'server_text', str(exc))[:get_settings().local_llm['error_text_chars']], level='ERROR')

@@ -23,7 +23,7 @@ class Secrets(BaseSettings):
 
 class Models(BaseModel):
     agent: str = Field(min_length=1)
-    agent_fallbacks: list[str] = Field(min_length=1)
+    agent_fallbacks: list[str] = Field(default_factory=list)
     vlm_ingest: str = Field(min_length=1)
     vlm_ingest_fallbacks: list[str]
     vlm_online: str = Field(min_length=1)

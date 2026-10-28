@@ -20,10 +20,10 @@ class Chat:
         self.sessions, self.flows = Sessions(self.store), Flows(self.store)
         self.runner, self.embeddings = runner or Runner(llm), embeddings
 
-    def _agent(self, session, text):
-        log.path('agent', reason='requires tool selection or grounded answer')
-        registry = Registry(session, self.store, embeddings=self.embeddings)
-        outcome = self.runner.run(session, text, registry)
+    def _agent(self, session, text, attachments=(), *, code_route=None, registry=None):
+        log.path('rag-code-routed' if code_route else 'agent', reason='code selected ' + code_route if code_route else 'requires tool selection or grounded answer')
+        registry = registry or Registry(session, self.store, embeddings=self.embeddings, customer_message=text, attachment_ids=attachments)
+        outcome = self.runner.run(session, text, registry, **({'code_route': code_route} if code_route else {}))
         # start_authentication is the model's signal to hold the original masked request.
         if any(name == 'start_authentication' for name, _ in registry.results):
             self.sessions.hold(session, text)
@@ -96,6 +96,23 @@ class Chat:
             personal = False
         if any(word in parsed.command for word in cfg.conversation['public_exceptions']) and not any(word in parsed.command for word in cfg.conversation['personal_owners']):
             personal = False
+        if cfg.models.agent.startswith('local/') and not (parsed.code and auth['state'] == 'AWAITING_OTP') and not parsed.mobile and not parsed.account:
+            registry = Registry(session, self.store, embeddings=self.embeddings, customer_message=parsed.text, attachment_ids=attachments)
+            words = set(re.findall(r'\w+', parsed.command))
+            public = any(re.search(pattern, parsed.command) for pattern in cfg.conversation['public_question_patterns']) or any(word.casefold() in parsed.command for word in cfg.conversation['public'])
+            route, why = None, None
+            if registry.references_upload():
+                route, why = 'search_my_documents', 'current attachment or reference to uploaded session files'
+            elif public and not personal and not session.get('active_flow') and not words.intersection(cfg.local_llm['routing_passthrough_words']):
+                route, why = 'search_bank_knowledge', 'public question without personal intent or an open flow'
+            elif auth['state'] == 'VERIFIED' and words.intersection(cfg.local_llm['balance_words']):
+                route, why = 'get_balance', 'verified customer requested the balance; return the tool display'
+            if route and route in registry.visible():
+                log.step('AGENT', 'code route selected', path='rag-code-routed', tool=route, why=why)
+                result = self._agent(session, parsed.text, attachments, code_route=route, registry=registry)
+                self._history(session, parsed, result)
+                log.step('API', 'chat response', auth=auth['state'], tools=result.get('tools_called', []))
+                return result
         if auth['state'] == 'VERIFIED' and parsed.account:
             own = self.store.one('accounts', {'account_id': auth['account_id']})
             if own['account_number'] != parsed.account:
@@ -149,16 +166,16 @@ class Chat:
                 request = session['last_submission']
                 fixed = envelope('OK', display=cfg.flows[request['type']]['success_template'].format(**request))
         if replay:
-            outputs = [self._agent(session, held['text']) for held in replay]
+            outputs = [self._agent(session, held['text'], held.get('attachments', ())) for held in replay]
             result = {'reply': '\n'.join(output['reply'] for output in outputs), 'citations': [citation for output in outputs for citation in output.get('citations', [])], 'tools_called': [name for output in outputs for name in output.get('tools_called', [])]}
         elif fixed:
             log.path('fast-otp' if auth['state'] != 'VERIFIED' or parsed.code else 'fast-confirm', reason=fixed['code'])
             result = {'reply': fixed['display'], 'citations': [], 'tools_called': []}
             if personal and any(word in parsed.command for word in cfg.conversation['mixed_public_signals']) and auth['state'] != 'VERIFIED':
-                public = self._agent(session, parsed.text)
+                public = self._agent(session, parsed.text, attachments)
                 result = {**public, 'reply': public['reply'] + '\n' + fixed['display']}
         else:
-            result = self._agent(session, parsed.text)
+            result = self._agent(session, parsed.text, attachments)
             if session.get('active_flow'):
                 status = self.flows.status(session)
                 suffix = cfg.messages['flow']['confirm_unclear'] if session['active_flow']['status'] == 'AWAITING_CONFIRM' else status['display']

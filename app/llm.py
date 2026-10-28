@@ -204,7 +204,7 @@ class LLMClient:
                 with log.span(
                     {"llm": "LLM", "embed": "EMBED", "vlm": "VLM"}[kind],
                     "provider call",
-                    provider="groq" if model.startswith("groq/") else "gemini",
+                    provider="local" if model.startswith('local/') else "groq" if model.startswith("groq/") else "gemini",
                     model=model,
                     purpose=purpose,
                 ):
@@ -362,7 +362,8 @@ class LLMClient:
             except QuotaExceeded:
                 break
             except Exception as exc:
-                if not _vision_fallback_error(exc):
+                from app.local_llm import LocalLLMError
+                if not isinstance(exc, LocalLLMError) and not _vision_fallback_error(exc):
                     raise
                 log.step(
                     "VLM",
@@ -375,6 +376,8 @@ class LLMClient:
                     error=type(exc).__name__,
                     status=getattr(exc, "status_code", None)
                     or getattr(exc, "code", None),
+                    http_status=getattr(exc, 'http_status', None),
+                    reason=getattr(exc, 'server_text', str(exc))[:self.settings.local_llm['error_text_chars']],
                 )
         return {
             "text": mask_text(local_ocr),
@@ -388,6 +391,13 @@ class LLMClient:
     def _vision(
         self, model: str, image: bytes, mime_type: str, prompt: str, timeout: float
     ) -> str:
+        if model.startswith('local/'):
+            from app.local_llm import LocalClient
+            encoded = base64.b64encode(image).decode('ascii')
+            if self.settings.local_llm['image_encoding'] == 'data_url':
+                encoded = f'data:{mime_type};base64,{encoded}'
+            client = LocalClient(None, model=model)
+            return client.request(client.prompt([{'role': 'user', 'content': prompt}], plain=True), image=encoded, kind='vlm')
         if model.startswith("groq/"):
             encoded = base64.b64encode(image).decode("ascii")
             result = self._groq.chat.completions.create(

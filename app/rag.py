@@ -37,6 +37,16 @@ def envelope(code, data=None, display="", hint=""):
     }
 
 
+def round_search_values(value):
+    if isinstance(value, float):
+        return round(value, get_settings().retrieval['result_float_decimals'])
+    if isinstance(value, dict):
+        return {key: round_search_values(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [round_search_values(child) for child in value]
+    return value
+
+
 def rrf(vector: list[dict], keyword: list[dict], k: int):
     rows, scores = {}, {}
     for source in (vector, keyword):
@@ -203,7 +213,7 @@ def search_knowledge(
         merged=len(merged),
         no_good_match=low,
     )
-    return envelope("OK", {"items": [] if low else items, "no_good_match": low})
+    return round_search_values(envelope("OK", {"items": [] if low else items, "no_good_match": low}))
 
 
 def lookup_rate(

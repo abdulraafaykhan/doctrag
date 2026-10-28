@@ -9,27 +9,44 @@ bank:
 models:
   # CONFIRM model ids in the Groq console / AI Studio before first run (they change).
   agent: "local/default"                   # switch back to groq/qwen/qwen3.8-27b to use Groq first
-  agent_fallbacks:
-    - "groq/qwen/qwen3.8-27b"
-    - "groq/openai/gpt-oss-20b"
-    - "gemini/gemini-flash-lite-latest"
-  vlm_ingest: "gemini-3.5-flash"             # offline tables: accuracy first
-  vlm_ingest_fallbacks:
-    - "groq/qwen/qwen3.8-27b"
-  vlm_online: "groq/qwen/qwen3.8-27b"       # customer screenshots: speed first
-  vlm_online_fallbacks:
-    - "gemini-3.5-flash"
+  # Previous agent fallbacks: [groq/qwen/qwen3.8-27b, groq/openai/gpt-oss-20b, gemini/gemini-flash-lite-latest]
+  agent_fallbacks: []
+  # Previous vision: ingest=gemini-3.5-flash -> groq/qwen/qwen3.8-27b; online=groq/qwen/qwen3.8-27b -> gemini-3.5-flash
+  vlm_ingest: "local/default"
+  vlm_ingest_fallbacks: []
+  vlm_online: "local/default"
+  vlm_online_fallbacks: []
   embed: "gemini-embedding-001"
   embed_dims: 768
   reranker: "BAAI/bge-reranker-base"         # only used if features.reranker is true
   temperature: 0.1
 
 local_llm:
-  server_id: "154"
-  max_tokens: 768
+  server_id: "161"
+  max_tokens: 400
+  max_tokens_tool: 200
+  stop_markers: ["\nUser:", "\nAssistant:", "\nHuman:", "\nCustomer:"]
+  raw_output_chars: 200
+  document_reference_words: [above, this, attached, attachment, attachments, image, images, screenshot, screenshots, file, files, document, documents, pdf, pdfs]
+  balance_words: [balance, balances]
+  routing_passthrough_words: [human, agent, person, escalate, escalation, fraud, stolen, lost, distress, login, authenticate, authentication, verify, otp]
+  image_token_cost: 1429  # observed 1555 server prompt tokens minus 126 estimated text tokens
   timeout_seconds: 25
   text_field: "response"
   protocol_retries: 1
+  context_limit_tokens: 6500
+  max_prompt_chars: 16000  # /api/inference OpenAPI constraint
+  error_text_chars: 120
+  history_token_budget: 300
+  retrieval:
+    context_token_budget: 800
+    parents_to_model: 3
+  enabled_tools: [search_bank_knowledge, search_my_documents, start_authentication, get_balance, chequebook_set_slots, flow_status, flow_summary, flow_cancel, escalate_to_human]
+  direct_display_tools: [chequebook_set_slots, flow_summary, flow_status, flow_cancel, get_balance, start_authentication]
+  scope_instruction: 'Support bank questions, uploaded documents, balance and cheque book, plus actions explicitly offered by the visible tools; decline other requests in one sentence and offer a human.'
+  tool_result_instruction: 'Use the tool results above to answer now with {"reply":"..."}. Call another tool only if information is still missing.'
+  final_reply_instruction: 'No tools are available now. Answer from the tool results already given with exactly {"reply":"..."}; do not request tools or invent missing facts.'
+  image_encoding: data_url  # optional image string; never inserted into the text prompt
 
 features:
   reranker: false        # needs extra install (sentence-transformers); keep off until eval needs it
@@ -98,6 +115,7 @@ ocr:
   render_dpi: 250
 
 retrieval:
+  result_float_decimals: 3
   candidates_each: 20
   rrf_k: 60
   rerank_to: 6
