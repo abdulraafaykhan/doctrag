@@ -1,111 +1,155 @@
 # Harbourline Bank assistant
 
-The assistant provides document Q&A, exact rate lookup, session-owned uploads,
-in-chat demo OTP authentication, balances and statements, and confirmed cheque
-book / debit card requests. FastAPI serves the React UI after a production build.
+A fictional Mumbai bank demo: FastAPI, React/Vite, MongoDB Atlas, local OCR,
+document retrieval, demo OTP login, and code-confirmed banking request flows.
+The current agent and vision models use the local server; embeddings still use Gemini.
+Local mode exposes a smaller service set than the Groq/CrewAI implementation.
+See [architecture](docs/ARCHITECTURE.md), [database map](docs/DB_MAP.md), and
+[local model settings and provider switch](docs/LOCAL_LLM.md).
 
-Install uv and Node 20+ (including npm), then run from this folder in PowerShell:
+## Setup (PowerShell)
+
+Work in `C:\Projects\bank_agent` on branch `local-llm`; never modify the separate doctrag project.
+Install uv and Node 20+ with npm. Use Python 3.12 exclusively through this project's venv.
 
 ```powershell
 uv venv --python 3.12
 uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+# Only for a fresh setup when .env does not already exist:
 Copy-Item .env.example .env
-# Set the three credentials in .env locally; never paste them into chat or logs.
-.venv\Scripts\python.exe scripts\seed_db.py
+npm --prefix frontend ci
+```
+
+Fill the local `.env` yourself: `GROQ_API_KEY`, `GEMINI_API_KEY`, `MONGODB_URI`,
+and `LOCAL_LLM_URL` for local mode. Keys remain required by settings even when
+the corresponding chat provider is disabled. `LOG_LEVEL` is optional.
+The database name is `database.name` in `config/settings.yaml`; `MONGODB_DB` in
+the example environment file is not a Secrets field and does not override it.
+Allow your IP in Atlas; use this app's database, never another project's data.
+Model names, limits and wording live in `config/`; prompts live in `prompts/`.
+Settings are cached: restart after editing configuration or environment variables.
+
+```powershell
 .venv\Scripts\python.exe scripts\create_indexes.py
+.venv\Scripts\python.exe scripts\seed_db.py
 .venv\Scripts\python.exe scripts\make_sample_docs.py
 .venv\Scripts\python.exe scripts\ingest_bank_docs.py
-npm --prefix frontend ci
+```
+
+Index creation waits for the single Atlas vector index to be READY; keyword search
+uses a normal MongoDB text index. It does not remove unrelated search indexes.
+Seeding upserts the fictional records without clearing collections. Sample generation
+preserves existing files. Ingestion deduplicates file hashes and resumes unfinished jobs.
+`--defer-embeddings` on the ingestion script postpones vector generation; normal ingestion
+and image processing can spend provider quota. Do not run them when live calls are prohibited.
+`requirements.txt` is the installation lock; `pyproject.toml` mirrors `requirements.in`.
+Always install with `uv pip install --python .venv\Scripts\python.exe ...`, never bare pip.
+
+## Run
+
+One terminal:
+
+```powershell
 .\scripts\run_dev.ps1
 ```
 
-Open http://127.0.0.1:5173 for development. The Vite proxy forwards `/api` to
-port 8000; both processes print to the same terminal and stop with Ctrl+C.
-If this desktop runtime exposes Node without npm, `run_dev.ps1` also recognizes
-the npm CLI under ignored `data/tools/`; a normal Node installation needs no workaround.
+Open http://127.0.0.1:5173. The launcher reads API settings from `config/ui.json`,
+starts the backend plus Vite, and forwards Ctrl+C for graceful backend shutdown.
+`scripts/dev_backend.py` is required by this launcher. The launcher can use the
+ignored npm CLI in `data/tools/` when npm is not on PATH.
 
-For production-style local serving:
-
-```powershell
-npm --prefix frontend run build
-.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Open http://127.0.0.1:8000. Only one tab owns a chat; reload uses the same
-tab ID, while a second tab receives 409. Cookies must be enabled. Uploads expire
-after the configured retention period; expired cards remain visible after reload.
-The demo login is mobile `9000000001`, account `000000000001`, then any six digits.
-These are synthetic fixtures. See [docs/DEMO.md](docs/DEMO.md) for the six-step demo.
-
-Gate 3 commands (the live command spends free-tier quota only for uncached inputs):
+Or use two terminals from the project root:
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_gate3.py -q
-npm --prefix frontend run build
-.venv\Scripts\python.exe scripts\run_gate3.py
-.venv\Scripts\python.exe -m pytest -q
+# Terminal 1
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+# Terminal 2
+npm --prefix frontend run dev
 ```
 
-Live cases use the configured Groq pacing guard and retain both successes and
-failures in `data/test_cache/`. Existing cached cases are never regenerated.
-Customer actions in the evaluation use isolated synthetic records; bank retrieval
-reads the already-ingested Atlas corpus. `eval/last_report.md` records limitations.
-
-Use Python 3.12 from `.venv\Scripts\python.exe` for every command. Install the
-locked dependencies with `uv pip install --python .venv\Scripts\python.exe -r requirements.txt`.
-`pyproject.toml` mirrors `requirements.in`; `requirements.txt` is the lockfile.
-
-Set `GROQ_API_KEY`, `GEMINI_API_KEY`, and `MONGODB_URI` in the local `.env`.
-Models, free-tier budgets, and all runtime limits are in `config/settings.yaml`;
-confirm provider model availability and budgets in the provider consoles.
+For a built UI served by FastAPI:
 
 ```powershell
-.venv\Scripts\python.exe scripts\create_indexes.py
-.venv\Scripts\python.exe scripts\seed_db.py
-.venv\Scripts\python.exe -m uvicorn app.main:app --no-access-log
-.venv\Scripts\python.exe -m pytest tests/test_money.py tests/test_masking.py tests/test_config.py tests/test_quota.py
+.\scripts\run_dev.ps1 -Build
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-The index script waits for the Atlas vector index to be READY. Keyword retrieval
-uses the normal `chunks_text` MongoDB text index. The API fails startup when
-required indexes are missing. Seeding upserts only the committed fake records;
-it does not clear collections. Seed identities and addresses are demo data only.
+Open http://127.0.0.1:8000 for the built UI. Startup checks Atlas and index readiness;
+`/api/health` reports availability. One client tab owns each chat; a second tab receives 409.
+Heartbeat refreshes tab presence, not activity. After 15 idle minutes the chat and
+owned uploads expire; the UI starts fresh. Sent messages appear immediately and queue
+while a reply is pending; New chat aborts the browser request and clears its queue.
+Logs are masked, with trace trees and token totals; rotating JSON lives in `data/logs/app.log`.
 
-Logs are masked in the terminal and in rotating JSON files under `data/logs/`.
-The tests use fake credentials and an in-memory quota store, with no provider or
-database calls. Live provider calls are not part of Phase 1 verification.
-
-Phase 2 samples and Gate 1:
+## Inspect stored data (read only)
 
 ```powershell
-.venv\Scripts\python.exe scripts\make_sample_docs.py
-.venv\Scripts\python.exe scripts\create_indexes.py
-.venv\Scripts\python.exe scripts\ingest_bank_docs.py --defer-embeddings
-.venv\Scripts\python.exe -m pytest tests/test_gate1.py -q
-$env:BANK_AGENT_LIVE_GATE = '1'
-.venv\Scripts\python.exe -m pytest tests/test_gate1_live.py -q -s
+.venv\Scripts\python.exe scripts\inspect_db.py summary
+.venv\Scripts\python.exe scripts\inspect_db.py session
+.venv\Scripts\python.exe scripts\inspect_db.py session <session-id>
+.venv\Scripts\python.exe scripts\inspect_db.py docs
+.venv\Scripts\python.exe scripts\inspect_db.py chunks "interest_rates.pdf"
+.venv\Scripts\python.exe scripts\inspect_db.py extraction <doc-id>
+.venv\Scripts\python.exe scripts\inspect_db.py drop-unknown
+.venv\Scripts\python.exe scripts\clean_test_data.py
 ```
 
-Sample generation preserves existing files. Ingestion skips unchanged hashes;
-incomplete jobs resume with deterministic chunk IDs. The live gate embeds stored
-chunks and queries, caches provider responses in `data/test_cache/`, and writes
-`eval/gate1_report.json` plus a readable report. Default tests skip the live gate.
-Quota counts use the Pacific day and count each embedding text conservatively.
-Ingest vision prefers Gemini with a 90-second timeout; online vision prefers
-Groq with a 25-second timeout. No input is trusted as an instruction.
+`drop-unknown` lists unknown collections; do not add `--yes` unless their removal is intended.
+`clean_test_data.py` previews all sessions, pending actions, audit events and requests,
+plus user-namespace knowledge rows. Its optional `--yes` deletes those rows only;
+it does not delete upload files, fixtures, quotas or bank content. Stop the app before
+an intentional deletion so its worker does not race the operation. No deletion was
+performed during repository cleanup.
 
-Phase 3 conversation engine and Gate 2:
+## Six-step demo
 
-```powershell
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe scripts\run_gate2.py
-.venv\Scripts\python.exe scripts\run_gate2.py --release --model groq/qwen/qwen3.8-27b
-```
+All names, documents and amounts below are fictional. Start one New chat. Wait for
+attachment cards to become Ready or Partial; Partial means review may be needed.
+These are the original demo's expected outcomes, not a claim that the current local
+model completes every step. The last local screenshot search had no good match;
+the writer path has not yet been validated end to end after its logging fix.
 
-`Chat.turn()` owns verification, held-message replay, leased sessions and explicit
-confirmation. Session-bound CrewAI tools expose only the actions permitted in the
-current state. The default suite uses FakeLLM; the explicit live runner uses Groq
-only for B/G/H, caches requests and complete cases, and paces against the published
-free-tier limits plus measured usage. No chat API routes are added before Phase 4.
-`scripts/retry_gate1_images.py` retries only the two original provider failures;
-successful cached image results and unchanged bank documents are reused.
+1. **Rate-table upload.** Attach `data/gate1_images/rates_00.png`.
+   Type: **From my attached image, what are the general and senior rates for 12 months?**
+   Expected fixture rates: **6.50% general, 7.00% senior**, cited as your file.
+   The sent image remains openable; questionable cells must be flagged, never guessed.
+   These fixture rates differ from the bank's current rate card.
+2. **PDF question.** No attachment; bank knowledge already contains `loan_eligibility.pdf`.
+   Type: **What are the age limits for a home loan applicant? Cite the document.**
+   Expected: **21 to 65**, with Loan eligibility, page and version in Sources.
+   Alternatively attach `data/bank_docs/loan_eligibility.pdf` and type:
+   **According to my PDF, what are the age limits for a home loan applicant?**
+   That answer must cite your file.
+3. **Current exact rate.** No attachment.
+   Type: **What is the fixed deposit rate for 12 months for a general customer?**
+   Expected corpus value: **7.10%**, effective **2026-10-01**, from the current card,
+   never the superseded card or the uploaded fixture. Local mode searches sources;
+   it does not expose the separate exact `lookup_rate` tool by default.
+4. **OTP and balance.** No attachment.
+   Type: **Show my balance. Mobile 9000000001, account 000000000001.**
+   Expected: ask for the demo OTP without revealing a balance. Type **123456**.
+   Expected after verification: **₹57,600.00**, masked account ending **0001**,
+   and a verified login chip. Typed demo OTP text may remain in the UI transcript;
+   it is excluded from model history. Six-digit document references are not masked.
+5. **Cheque book.** Type: **I need a new chequebook**.
+   Click **40 pages**, **Emergency (within 1 week)**, then **Address on file**.
+   Expected: sent bubbles for clicks; a summary with Confirm / Change / Cancel.
+   Click **Confirm**. Expected: exactly one request, **CB-…** reference and expected date;
+   repeating Confirm must not duplicate it. No submission before confirmation.
+6. **Multi-part request.** Remain verified; no attachment.
+   Type: **Show my balance, last 5 transactions and the current 12-month general FD rate.**
+   Full-service expected answer: **₹57,600.00**, five newest-first transactions with
+   code-formatted amounts, and **7.10%** from the current rate card, without re-login
+   or a full account number. Current local routing returns the balance display for
+   this message; statements are disabled in its tool list, so the complete answer is
+   a known local-mode limitation. The Groq configuration restores the full tool set.
+
+Historical evaluation reports are archived in `_cleanup_trash/eval/`; incomplete or quota-blocked cases are
+not passing results. A safe inability-to-answer is a limitation, not demo success.
+
+## Reversible repository cleanup
+
+Archived files retain relative paths under `_cleanup_trash/`; nothing was deleted.
+The original manifest records the first cleanup's source hashes. Tests, evaluation
+helpers, one-time migration code, the unused src scaffold, build prompts and test
+specifications are now archived too; they do not override CLAUDE's Git rules.

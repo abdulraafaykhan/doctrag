@@ -25,6 +25,17 @@ local_llm:
   server_id: "161"
   max_tokens: 400
   max_tokens_tool: 200
+  max_tokens_writer: 200
+  writer_extract_chars: 400
+  writer_extract_prefix: 'Here is what our documents say:'
+  writer_source_label: '{title}, page {page}'
+  writer_raw_answer_chars: 300
+  writer_output_preview_chars: 200
+  writer_answer_label: 'Answer:'
+  writer_strip_labels: [Answer, Assistant, Response, Final answer]
+  min_grounded_ratio: 0.6
+  grounded_min_word_chars: 4
+  grounded_stop_words: [about, after, again, also, although, always, among, another, anyone, anything, because, been, before, being, below, between, both, could, does, doing, down, during, each, either, else, even, every, from, further, have, having, here, into, itself, just, more, most, much, must, neither, never, only, other, ours, ourselves, over, please, same, should, since, some, such, than, that, their, theirs, them, themselves, then, there, these, they, this, those, through, under, until, upon, very, want, were, what, when, where, whether, which, while, whom, will, with, within, without, would, your, yours, yourself, yourselves]
   stop_markers: ["\nUser:", "\nAssistant:", "\nHuman:", "\nCustomer:"]
   raw_output_chars: 200
   document_reference_words: [above, this, attached, attachment, attachments, image, images, screenshot, screenshots, file, files, document, documents, pdf, pdfs]
@@ -39,8 +50,8 @@ local_llm:
   error_text_chars: 120
   history_token_budget: 300
   retrieval:
-    context_token_budget: 800
-    parents_to_model: 3
+    context_token_budget: 1800
+    parents_to_model: 4
   enabled_tools: [search_bank_knowledge, search_my_documents, start_authentication, get_balance, chequebook_set_slots, flow_status, flow_summary, flow_cancel, escalate_to_human]
   direct_display_tools: [chequebook_set_slots, flow_summary, flow_status, flow_cancel, get_balance, start_authentication]
   scope_instruction: 'Support bank questions, uploaded documents, balance and cheque book, plus actions explicitly offered by the visible tools; decline other requests in one sentence and offer a human.'

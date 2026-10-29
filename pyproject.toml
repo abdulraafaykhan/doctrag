@@ -43,7 +43,3 @@ build-backend = "uv_build"
 module-name = "app"
 module-root = ""
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-markers = ["live: opt-in cached Atlas, embedding and VLM Gate 1 checks"]

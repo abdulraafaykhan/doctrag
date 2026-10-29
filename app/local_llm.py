@@ -26,6 +26,9 @@ class LocalClient:
         self.model = model or self.settings.models.agent
         self.usage = usage if usage is not None else []
         self.last_response = {}
+        self.writer_sources = []
+        self.writer_raw_output = ''
+        self.writer_grounded_ratio = 0.0
 
     def tokens(self, text):
         return math.ceil(len(text) / self.settings.chunking['chars_per_token'])
@@ -92,17 +95,40 @@ class LocalClient:
             raise LocalLLMError('Local prompt exceeds configured context or server character limit')
         if MOBILE.search(prompt) or ACCOUNT.search(prompt):
             raise LocalLLMError('Unmasked identity in provider prompt')
+        if writer:
+            # Cite only sections that survived trimming, in the order actually sent.
+            self.writer_sources = [row for _, value in envelopes for row in value['data']['items']]
         return prompt
 
     def write(self, messages):
-        text = self.request(self.prompt(messages, writer=True))
-        cut = min((text.find(marker) for marker in self.settings.local_llm['stop_markers'] if marker in text), default=len(text))
-        reply = text[:cut].strip()
-        if not reply:
-            raise LocalLLMError('Local writer returned an empty answer', http_status=self.last_response.get('http_status'))
+        cfg = self.settings.local_llm
+        prompt = self.prompt(messages, writer=True)
+        if not self.writer_sources:
+            raise LocalLLMError('No source passage fits the local writer prompt')
+        try:
+            text = self.request(prompt, writer=True)
+        except LocalLLMError:
+            log.step('VERIFY', 'local writer output', model=self.model, grounded_ratio=0.0, raw_output='', why='writer request failed; no answer to assess')
+            raise
+        self.writer_raw_output = text
+        _, label, answer = text.partition(cfg['writer_answer_label'])
+        text = (answer if label else text).strip()
+        blank = re.search(r'\r?\n[ \t]*\r?\n', text)
+        cut = min([len(text), blank.start() if blank else len(text), *(text.find(marker) for marker in cfg['stop_markers'] if marker in text)])
+        reply = text[:cut].strip(' \t\r\n`*')
+        labels = '|'.join(re.escape(value) for value in cfg['writer_strip_labels'])
+        reply = re.sub(r'^(?:(?:' + labels + r')\s*:\s*[*`]*\s*)+', '', reply, flags=re.I).strip()
+        # Compare answer words with passage text only, excluding source headers and instructions.
+        head, _, tail = self.settings.conversation['agent']['source_wrapper'].partition('{text}')
+        passages = ' '.join(source['text'].removeprefix(head.format(**source)).removesuffix(tail) for source in self.writer_sources)
+        source_words = set(re.findall(r'[^\W\d_]+', passages.lower()))
+        stop_words = set(cfg['grounded_stop_words'])
+        content_words = [word for word in re.findall(r'[^\W\d_]+', reply.lower()) if len(word) >= cfg['grounded_min_word_chars'] and word not in stop_words]
+        self.writer_grounded_ratio = sum(word in source_words for word in content_words) / len(content_words) if content_words else 0.0
+        log.step('VERIFY', 'local writer output', model=self.model, grounded_ratio=self.writer_grounded_ratio, raw_output=mask_text(self.writer_raw_output)[:cfg['writer_output_preview_chars']], why='content-word overlap against only the source passages sent to the writer')
         return reply
 
-    def request(self, prompt, *, image=None, kind='llm', tool_selection=False):
+    def request(self, prompt, *, image=None, kind='llm', tool_selection=False, writer=False):
         cfg, url = self.settings.local_llm, self.settings.secrets.local_llm_url
         if not url:
             raise LocalLLMError('LOCAL_LLM_URL is not configured')
@@ -110,7 +136,7 @@ class LocalClient:
         if not self.fits(prompt, image_tokens):
             raise LocalLLMError('Local prompt exceeds configured context or server character limit')
         estimated_prompt = self.tokens(prompt) + image_tokens
-        payload = {'server': cfg['server_id'], 'prompt': prompt, 'max_tokens': cfg['max_tokens_tool'] if tool_selection else cfg['max_tokens']}
+        payload = {'server': cfg['server_id'], 'prompt': prompt, 'max_tokens': cfg['max_tokens_writer'] if writer else cfg['max_tokens_tool'] if tool_selection else cfg['max_tokens']}
         if image is not None:
             payload['image'] = image
         started = perf_counter()

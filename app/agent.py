@@ -250,6 +250,8 @@ class Runner:
             task = cfg.conversation['agent']['task'].format(history=[], message=message)
             messages = [messages[0], *[{**item, 'history': True} for item in history], {'role': 'user', 'content': mask_text(task)}]
         reply = None
+        writer_sources = None
+        writer_grounded = True
         if local_mode and code_route:
             output = registry.tools[code_route].invoke({} if code_route == 'get_balance' else {'query': message})
             log.path('rag-code-routed', reason='code selected ' + code_route + '; local model writes only; visibility and tool validation still apply')
@@ -268,7 +270,10 @@ class Runner:
                 # Keep source envelopes intact until the shared local budget trimmer renders them.
                 messages.insert(-1, {'role': 'tool', 'content': json.dumps(output, default=str)})
                 try:
-                    reply = LocalClient(registry, model=self.model or cfg.models.agent, usage=self.usage).write(messages)
+                    client = LocalClient(registry, model=self.model or cfg.models.agent, usage=self.usage)
+                    reply = client.write(messages)
+                    writer_sources = client.writer_sources
+                    writer_grounded = bool(reply.strip()) and client.writer_grounded_ratio >= cfg.local_llm['min_grounded_ratio']
                     log.step('LLM', 'model answered', model=self.model or cfg.models.agent, path='rag-code-routed', why='one plain-text answer from retrieved sources')
                 except Exception as exc:
                     self._provider_error(self.model or cfg.models.agent, exc)
@@ -292,14 +297,25 @@ class Runner:
                         log.step('AGENT', 'fallback switch', model=model, next_model=chain[position + 1])
         if reply is None:
             return {'reply': cfg.messages['answers']['retry_later'], 'citations': [], 'usage': self.usage}
+        raw_answer = client.writer_raw_output if writer_sources is not None else reply
         reply = canonical_citations(reply)
+        if writer_sources is not None:
+            reply += '\n\n' + ' '.join(f"[{item['n']}]" for item in writer_sources)
         displays = list(dict.fromkeys(result['display'] for _, result in registry.results if result.get('display')))
         for display in displays:
             if display not in reply:
                 reply += '\n' + display
+        verification_results = registry.results if writer_sources is None else [(code_route, {'data': {'items': writer_sources}})]
         with log.span('VERIFY', 'number check', module=check.__module__, function=check.__qualname__):
-            valid, errors = check(reply, registry.results)
+            valid, errors = check(reply, verification_results)
         log.step('VERIFY', 'number and citation check', passed=valid, errors=errors, why='every number and citation must match tool evidence')
+        if writer_sources is not None:
+            if not valid or not writer_grounded:
+                log.step('VERIFY', 'local writer rejected', raw_answer=mask_text(raw_answer)[:cfg.local_llm['writer_raw_answer_chars']], grounded_ratio=client.writer_grounded_ratio, failing_numbers=errors['numbers'], errors=errors, why='writer answer failed source verification' if not valid else 'writer answer is empty or content-word overlap is below the configured threshold')
+                reply, writer_sources = self._writer_extract(writer_sources)
+                log.step('VERIFY', 'local writer fallback', returned='extractive' if writer_sources else 'safe_message', why='verbatim source passage available' if writer_sources else 'no usable source passage')
+            log.step('AGENT', 'final response', chars=len(reply), calls=len(registry.results))
+            return {'reply': mask_text(reply), 'citations': writer_sources, 'usage': self.usage}
         if not valid:
             repair = cfg.prompts['repair'].replace('{{bad_numbers}}', json.dumps(errors)).replace('{{sources}}', json.dumps(registry.results, default=str))
             log.step('VERIFY', 'repair required', errors=errors, why='answer failed number or citation validation')
@@ -320,6 +336,24 @@ class Runner:
         citations = [item for _, result in registry.results for item in result.get('data', {}).get('items', [])]
         log.step('AGENT', 'final response', chars=len(reply), calls=len(registry.results))
         return {'reply': mask_text(reply), 'citations': citations, 'usage': self.usage}
+
+    @staticmethod
+    def _writer_extract(sources):
+        cfg = get_settings()
+        head, _, tail = cfg.conversation['agent']['source_wrapper'].partition('{text}')
+        for source in sorted(sources, key=lambda item: item.get('score', 0), reverse=True):
+            # Remove the wrapper before quoting; never truncate inside a numeric token.
+            passage = source.get('text', '').removeprefix(head.format(**source)).removesuffix(tail).strip()
+            limit = cfg.local_llm['writer_extract_chars']
+            if len(passage) > limit:
+                clipped = passage[:limit]
+                passage = clipped.rsplit(None, 1)[0] if any(char.isspace() for char in clipped) else ''
+            if not passage:
+                continue
+            label = cfg.local_llm['writer_source_label'].format(title=source.get('doc_title', ''), page=source.get('page', ''))
+            answer = f"{cfg.local_llm['writer_extract_prefix']}\n\n{passage}\n\n{label} [{source['n']}]"
+            return answer, [source]
+        return cfg.messages['answers']['unverified_number'], []
 
     @staticmethod
     def _provider_error(model, exc):
